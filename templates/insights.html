@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="row">
+    <!-- Frequency Summary -->
+    <div class="col-md-6 mb-4">
+        <div class="card p-4 h-100">
+            <h3 class="h5 text-primary">Recurring Issues</h3>
+            <hr>
+            {% if frequency %}
+                {% for item in frequency %}
+                <div class="d-flex justify-content-between border-bottom py-2">
+                    <span>{{ item.symptom }}</span>
+                    <span class="badge bg-primary rounded-pill">{{ item.count }} times</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">Keep logging to see frequency trends.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Correlation Alerts -->
+    <div class="col-md-6 mb-4">
+        <div class="card p-4 h-100 border-warning">
+            <h3 class="h5 text-warning">Potential Triggers</h3>
+            <p class="small text-muted">Items tagged 'Avoid' eaten within 4 hours of a symptom.</p>
+            <hr>
+            {% if correlations %}
+                {% for report in correlations %}
+                <div class="alert alert-warning py-2 mb-2">
+                    ⚠️ <strong>{{ report.symptom }}</strong> occurred after eating <strong>{{ report.food_name }}</strong>.
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-success">No high-risk correlations found yet. Great job!</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

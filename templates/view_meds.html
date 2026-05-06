@@ -1,0 +1,74 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="row">
+    <!-- Add Medication Form -->
+    <div class="col-md-4">
+        <div class="card p-4 mb-4">
+            <h3 class="h5">Add Medication</h3>
+            <p class="text-muted small">Especially important for H. pylori treatment cycles.</p>
+            <form action="/add_med" method="post">
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Medication Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Amoxicillin" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Dosage</label>
+                    <input type="text" name="dosage" class="form-control" placeholder="e.g. 500mg">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">Time</label>
+                    <input type="time" name="time" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Special Instructions</label>
+                    <textarea name="instructions" class="form-control" placeholder="e.g. Take 30 mins before breakfast" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn btn-success w-100">Add to Schedule</button>
+            </form>
+        </div>
+        
+        <!-- Helpful Tip for H. Pylori patients -->
+        <div class="alert alert-info small">
+            <strong>Tip:</strong> If you are on antibiotic therapy, try to space your probiotics at least 2 hours away from your antibiotic dose.
+        </div>
+    </div>
+
+    <!-- Medication List -->
+    <div class="col-md-8">
+        <div class="card p-4">
+            <h3 class="h5">Daily Schedule</h3>
+            {% if meds %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Time</th>
+                                <th>Medication</th>
+                                <th>Dosage</th>
+                                <th>Instructions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for med in meds %}
+                            <tr>
+                                <td class="fw-bold text-success">{{ med.time }}</td>
+                                <td>{{ med.name }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ med.dosage }}</span></td>
+                                <td class="text-muted italic small">{{ med.instructions }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <p class="text-muted">No medications added yet. Use the form to start your schedule.</p>
+                </div>
+            {% endif %}
+            <div class="mt-3">
+                <a href="/" class="btn btn-link btn-sm text-decoration-none">← Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
