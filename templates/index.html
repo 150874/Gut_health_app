@@ -2,21 +2,61 @@
 <html>
 <head>
     <title>Gut Health App</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #f5f7fb;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        a {
+            text-decoration: none;
+            color: #2b6cb0;
+            font-weight: bold;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: none;
+            background: #2b6cb0;
+            color: white;
+            border-radius: 6px;
+        }
+    </style>
 </head>
+
 <body>
-    <h2>Gut Health Checker</h2>
 
-    <form action="/check" method="post">
-        <label>Food:</label>
-        <input type="text" name="food"><br><br>
+    <h2>🩺 Gut Health Companion</h2>
 
-        <label>Condition:</label>
-        <select name="condition">
-            <option value="gastritis">Gastritis</option>
-            <option value="gerd">GERD</option>
-        </select><br><br>
+    <div class="card">
+        <form action="/check" method="post">
+            <h3>Food Checker</h3>
+            <input type="text" name="food" placeholder="Enter food"><br><br>
 
-        <button type="submit">Check</button>
-    </form>
+            <select name="condition">
+                <option value="gastritis">Gastritis</option>
+                <option value="gerd">GERD</option>
+            </select><br><br>
+
+            <button type="submit">Check</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <a href="/medication">💊 Medication</a><br>
+        <a href="/symptoms">🤕 Symptoms</a><br>
+        <a href="/insights">📊 Insights</a><br>
+        <a href="/reminders">⏰ Reminders</a>
+    </div>
+
 </body>
 </html>
