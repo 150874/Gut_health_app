@@ -1,34 +1,140 @@
-{% extends "layout.html" %}
-{% block content %}
-<div class="row">
-    <div class="col-md-4">
-        <div class="card p-4 mb-4">
-            <h3 class="h5">Log New Symptom</h3>
-            <form action="/add_symptom" method="post">
-                <input type="text" name="symptom" class="form-control mb-2" placeholder="Symptom (e.g. Bloating)" required>
-                <label class="small">Severity (1-10)</label>
-                <input type="range" name="severity" class="form-range mb-2" min="1" max="10">
-                <textarea name="note" class="form-control mb-3" placeholder="Notes..."></textarea>
-                <button type="submit" class="btn btn-success w-100">Save Log</button>
-            </form>
-        </div>
-    </div>
-    <div class="col-md-8">
-        <div class="card p-4">
-            <h3 class="h5">Symptom History</h3>
-            <div class="list-group list-group-flush">
-                {% for log in logs %}
-                <div class="list-group-item">
-                    <div class="d-flex w-100 justify-content-between">
-                        <h6 class="mb-1">{{ log.symptom }}</h6>
-                        <span class="badge bg-secondary">Severity: {{ log.severity }}</span>
-                    </div>
-                    <p class="mb-1 text-muted">{{ log.note }}</p>
-                    <small class="text-black-50">{{ log.timestamp }}</small>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symptom Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root { --gh-blue: #4a6fa5; --gh-light-blue: #f0f4f8; }
+        body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
+        .header-nav { background: white; border-bottom: 1px solid #e2e8f0; padding: 15px 0; }
+        .card { border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 2px 10px rgba(0,0,0,0.02); margin-bottom: 25px; }
+        .form-label { font-weight: 600; color: #334155; }
+        .btn-quick-add { border: 1px solid #e2e8f0; background: white; border-radius: 10px; padding: 5px 15px; font-size: 0.9rem; color: #475569; margin-bottom: 8px; transition: 0.2s; }
+        .btn-quick-add:hover { background: #f1f5f9; }
+        .insight-card { background-color: #eff6ff; border-radius: 15px; border: 1px solid #dbeafe; }
+        .help-box { background-color: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 10px; padding: 15px; }
+        .timeline-item { border-radius: 15px; background: white; padding: 15px; margin-bottom: 10px; border: 1px solid #f1f5f9; }
+        .severity-badge { font-size: 0.75rem; padding: 4px 10px; border-radius: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="header-nav mb-4">
+    <div class="container d-flex align-items-center">
+        <a href="/" class="text-dark me-3"><i class="bi bi-arrow-left"></i></a>
+        <h1 class="h5 mb-0 fw-bold">Symptom Tracker</h1>
     </div>
 </div>
-{% endblock %}
+
+<div class="container" style="max-width: 700px;">
+    
+    <!-- Log Symptom Form (Ref: image_87b3e5.png) -->
+    <div class="card p-4">
+        <h2 class="h6 fw-bold mb-4">Log Symptom</h2>
+        <form action="/add_symptom" method="POST">
+            <div class="mb-3">
+                <label class="form-label">Symptom</label>
+                <input type="text" id="symptom-input" name="symptom" class="form-control" placeholder="e.g., bloating, nausea, pain..." required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Severity</label>
+                <select name="severity" class="form-select">
+                    <option value="Mild">Mild</option>
+                    <option value="Moderate">Moderate</option>
+                    <option value="Severe">Severe</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="form-label">Notes (Optional)</label>
+                <textarea name="note" class="form-control" rows="3" placeholder="Additional details about your symptom..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 py-2" style="background-color: var(--gh-blue); border: none; border-radius: 12px;">
+                <i class="bi bi-plus-lg me-1"></i> Log Symptom
+            </button>
+        </form>
+    </div>
+
+    <!-- Quick Add Section -->
+    <div class="mb-4">
+        <p class="small text-muted mb-2">Quick add:</p>
+        <div class="d-flex flex-wrap gap-2">
+            {% for s in ['Bloating', 'Nausea', 'Abdominal pain', 'Gas', 'Heartburn', 'Diarrhea', 'Constipation', 'Cramping'] %}
+            <button type="button" class="btn btn-quick-add" onclick="document.getElementById('symptom-input').value='{{ s }}'">{{ s }}</button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Symptom Insights (Ref: image_87b34c.png) -->
+    {% if knowledge %}
+    <div class="mb-4">
+        <div class="d-flex align-items-center mb-3">
+            <i class="bi bi-lightbulb text-primary me-2"></i>
+            <h3 class="h6 fw-bold mb-0">Symptom Insights</h3>
+        </div>
+        <div class="card insight-card p-4">
+            <div class="d-flex align-items-center mb-2">
+                <i class="bi bi-graph-up text-primary me-2"></i>
+                <h4 class="h6 fw-bold mb-0">{{ knowledge.symptom_name }}</h4>
+            </div>
+            <p class="small text-muted mb-3">Often caused by gas buildup, food sensitivity, or digestive issues.</p>
+            
+            <div class="bg-white p-3 border rounded mb-3">
+                <label class="text-muted x-small fw-bold text-uppercase mb-1" style="font-size: 0.65rem;">Expected Duration</label>
+                <p class="small mb-0">{{ knowledge.duration }}</p>
+            </div>
+
+            <div class="help-box mb-3">
+                <label class="text-success x-small fw-bold text-uppercase mb-1" style="font-size: 0.65rem;">When to Seek Help</label>
+                <p class="small mb-0 text-dark">{{ knowledge.seek_help }}</p>
+            </div>
+
+            <label class="text-muted x-small fw-bold text-uppercase mb-2" style="font-size: 0.65rem;">Helpful Tips</label>
+            <ul class="small ps-3 mb-0">
+                {% for tip in tips %}
+                <li class="mb-1">{{ tip.strip() }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Symptom Timeline -->
+    <h3 class="h6 fw-bold mb-3">Symptom Timeline</h3>
+    <div class="timeline">
+        {% if logs %}
+            {% for log in logs %}
+            <div class="timeline-item d-flex justify-content-between align-items-center shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; border: 1px solid #dbeafe;">
+                        <i class="bi bi-exclamation-circle text-primary"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h5 class="h6 fw-bold mb-0">{{ log.symptom }}</h5>
+                            <span class="severity-badge {% if log.severity == 'Mild' %}bg-primary-subtle text-primary{% elif log.severity == 'Severe' %}bg-danger-subtle text-danger{% else %}bg-warning-subtle text-warning{% endif %}">
+                                {{ log.severity|lower }}
+                            </span>
+                        </div>
+                        <small class="text-muted">Just now</small> <!-- Note: You can use a filter for 'time ago' later -->
+                    </div>
+                </div>
+                <button class="btn btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-exclamation-circle text-muted h1 d-block mb-3"></i>
+                <p class="text-muted">No symptoms logged yet.</p>
+                <p class="small text-muted">Log your first symptom above</p>
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
