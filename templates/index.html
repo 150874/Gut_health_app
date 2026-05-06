@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gut Health App</title>
+</head>
+<body>
+    <h2>Gut Health Checker</h2>
+
+    <form action="/check" method="post">
+        <label>Food:</label>
+        <input type="text" name="food"><br><br>
+
+        <label>Condition:</label>
+        <select name="condition">
+            <option value="gastritis">Gastritis</option>
+            <option value="gerd">GERD</option>
+        </select><br><br>
+
+        <button type="submit">Check</button>
+    </form>
+</body>
+</html>
