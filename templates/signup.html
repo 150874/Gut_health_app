@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account - Gut Health</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --gh-forest-green: #2d6a4f; 
+            --gh-blue: #4a6fa5;
+            --gh-bg: #f8fafc;
+        }
+        body { 
+            background-color: var(--gh-bg); 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 0;
+        }
+        .signup-card { 
+            border-radius: 20px; 
+            border: 1px solid #e2e8f0; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+            width: 100%;
+            max-width: 450px;
+            background: white;
+            padding: 40px;
+        }
+        .brand-icon { 
+            background-color: var(--gh-forest-green); 
+            color: white; 
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin: 0 auto 15px auto;
+        }
+        .form-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #64748b;
+        }
+        .form-control, .form-select {
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            background-color: #f1f5f9;
+        }
+        .form-control:focus, .form-select:focus {
+            box-shadow: 0 0 0 3px rgba(74, 111, 165, 0.1);
+            border-color: var(--gh-blue);
+        }
+        .btn-gh {
+            background-color: var(--gh-blue);
+            color: white;
+            border-radius: 12px;
+            padding: 12px;
+            font-weight: 600;
+            transition: 0.3s;
+            border: none;
+        }
+        .btn-gh:hover {
+            background-color: #3b5a87;
+            color: white;
+        }
+        .login-link {
+            text-decoration: none;
+            color: var(--gh-forest-green);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+<div class="signup-card">
+    <div class="text-center">
+        <div class="brand-icon">
+            <i class="bi bi-heart-fill"></i>
+        </div>
+        <h2 class="h4 fw-bold mb-1">Create Account</h2>
+        <p class="text-muted small mb-4">Start your journey to better gut health</p>
+    </div>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Full Name</label>
+            <input type="text" name="name" class="form-control" placeholder="Sarah Johnson" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Email Address</label>
+            <input type="email" name="email" class="form-control" placeholder="name@example.com" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control" placeholder="Create a strong password" required>
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label">Main Condition</label>
+            <select name="condition" class="form-select">
+                <option value="gastritis">Gastritis</option>
+                <option value="gerd">GERD / Acid Reflux</option>
+                <option value="hpylori">H. pylori Infection</option>
+                <option value="general">General Gut Health</option>
+            </select>
+            <div class="form-text mt-2" style="font-size: 0.75rem;">
+                This helps us personalize your diet guides and reminders[cite: 34, 38].
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-gh w-100 mb-3">Sign Up</button>
+    </form>
+
+    <div class="mt-2 text-center small">
+        <span class="text-muted">Already have an account?</span> 
+        <a href="/login" class="login-link ms-1">Login</a>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
