@@ -4,123 +4,171 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gut Health Dashboard</title>
-    <!-- Bootstrap 5 CSS -->
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
     <style>
         :root {
             --gh-blue: #4a6fa5;
             --gh-light-blue: #f0f4f8;
             --gh-green-bg: #e8f5e9;
-            --gh-green-icon: #c8e6c9;
         }
-        body { background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .navbar-brand i { background-color: var(--gh-blue); color: white; padding: 5px; border-radius: 50%; }
-        .card { border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 20px; }
-        .summary-box { background-color: #e2e8f0; border-radius: 15px; padding: 15px; text-align: center; }
-        .summary-number { font-size: 1.8rem; font-weight: bold; display: block; }
-        .summary-label { font-size: 0.85rem; color: #64748b; }
-        .feature-icon { background-color: var(--gh-green-bg); color: #2e7d32; padding: 10px; border-radius: 12px; font-size: 1.5rem; }
-        .btn-action { background-color: #f8fafc; border: 1px solid #e2e8f0; color: #334155; border-radius: 10px; padding: 10px; transition: 0.2s; }
-        .btn-action:hover { background-color: #f1f5f9; }
-        .logout-link { text-decoration: none; color: #334155; font-weight: 500; }
+
+        body {
+            background-color: #f8fafc;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .navbar-brand i {
+            background-color: var(--gh-blue);
+            color: white;
+            padding: 5px;
+            border-radius: 50%;
+        }
+
+        .card {
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            margin-bottom: 20px;
+        }
+
+        .summary-box {
+            background-color: #e2e8f0;
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .summary-number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            display: block;
+        }
+
+        .feature-icon {
+            background-color: var(--gh-green-bg);
+            color: #2e7d32;
+            padding: 10px;
+            border-radius: 12px;
+            font-size: 1.5rem;
+        }
+
+        .btn-action {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px;
+        }
     </style>
 </head>
+
 <body>
 
-<!-- Header / Nav (Ref: image_87b7a7.png) -->
 <nav class="navbar navbar-light bg-white border-bottom py-3 mb-4">
     <div class="container">
         <a class="navbar-brand d-flex align-items-center fw-bold" href="/">
             <i class="bi bi-heart-fill me-2"></i> Gut Health
         </a>
-        <a href="#" class="logout-link"><i class="bi bi-box-arrow-right me-1"></i> Logout</a>
+
+        <a href="/logout" class="text-decoration-none text-dark">
+            <i class="bi bi-box-arrow-right me-1"></i> Logout
+        </a>
     </div>
 </nav>
 
 <div class="container" style="max-width: 800px;">
-    <!-- Welcome Header -->
+
+    <!-- Header -->
     <div class="mb-4">
-        <h1 class="h3 fw-bold mb-1">Welcome, {{ user.name if user else 'Sarah' }}!</h1>
-        <p class="text-muted">Today is Wednesday, May 6</p>
+        <h1 class="h3 fw-bold mb-1">Welcome, {{ user_name }}!</h1>
+        <p class="text-muted">Today is {{ current_date }}</p>
     </div>
 
-    <!-- Today's Summary Section -->
+    <!-- Summary -->
     <div class="card p-4">
         <h2 class="h6 fw-bold mb-4">Today's Summary</h2>
+
         <div class="row g-3">
             <div class="col-4">
                 <div class="summary-box">
-                    <span class="summary-label">Meals Logged</span>
-                    <span class="summary-number">{{ meals if meals is defined else 0 }}</span>
+                    <span class="small text-muted">Meals</span>
+                    <span class="summary-number">{{ meals }}</span>
                 </div>
             </div>
+
             <div class="col-4">
                 <div class="summary-box">
-                    <span class="summary-label">Medications</span>
-                    <span class="summary-number">{{ meds_count if meds_count is defined else 0 }}</span>
+                    <span class="small text-muted">Meds</span>
+                    <span class="summary-number">{{ meds_count }}</span>
                 </div>
             </div>
+
             <div class="col-4">
                 <div class="summary-box">
-                    <span class="summary-label">Symptoms</span>
-                    <span class="summary-number">{{ symptoms_count if symptoms_count is defined else 0 }}</span>
+                    <span class="small text-muted">Symptoms</span>
+                    <span class="summary-number">{{ symptoms_count }}</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Diet Checker Section (Ref: image_87b026.png) -->
+    <!-- Diet Checker -->
     <div class="card p-4">
+
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
                 <h2 class="h6 fw-bold mb-1">Diet Checker</h2>
-                <p class="small text-muted mb-0">Check if foods are safe for your condition</p>
+                <p class="small text-muted">Is it safe for your condition?</p>
             </div>
-            <div class="feature-icon"><i class="bi bi-apple"></i></div>
+
+            <div class="feature-icon">
+                <i class="bi bi-apple"></i>
+            </div>
         </div>
-        
-        <!-- Logic for display if coming from /check route -->
-        {% if status %}
-        <div class="alert {% if status == 'safe' %}alert-success{% elif status == 'avoid' %}alert-danger{% else %}alert-warning{% endif %} mb-3">
-            <strong>{{ food.capitalize() }}:</strong> It is marked as <strong>{{ status }}</strong>.
+
+        {% if food and status %}
+        <div class="alert 
+            {% if status == 'safe' %}alert-success
+            {% elif status == 'avoid' %}alert-danger
+            {% else %}alert-warning{% endif %}">
+            
+            <strong>{{ food }}</strong> is marked as <strong>{{ status }}</strong>
         </div>
         {% endif %}
 
         <form action="/check" method="POST">
-            <div class="mb-3">
-                <input type="text" name="food" class="form-control" placeholder="e.g., chicken, apple, coffee..." required>
-            </div>
+            <input type="text" name="food" class="form-control mb-3" placeholder="e.g., apple, coffee..." required>
             <button type="submit" class="btn btn-action w-100">Check Food</button>
         </form>
     </div>
 
-    <!-- Medication Tracker Section (Ref: image_87abb2.png) -->
+    <!-- Medications -->
     <div class="card p-4">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <div>
-                <h2 class="h6 fw-bold mb-1">Medication Tracker</h2>
-                <p class="small text-muted mb-0">Track and remember your medications</p>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h6 fw-bold mb-0">Medication Tracker</h2>
+            <div class="feature-icon">
+                <i class="bi bi-capsule"></i>
             </div>
-            <div class="feature-icon"><i class="bi bi-capsule"></i></div>
         </div>
+
         <a href="/view_meds" class="btn btn-action w-100">Manage Medications</a>
     </div>
 
-    <!-- Symptom Tracker Section (Ref: image_87b3e5.png) -->
+    <!-- Symptoms -->
     <div class="card p-4">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <div>
-                <h2 class="h6 fw-bold mb-1">Symptom Tracker</h2>
-                <p class="small text-muted mb-0">Log and track your symptoms over time</p>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h6 fw-bold mb-0">Symptom Tracker</h2>
+            <div class="feature-icon" style="background-color: var(--gh-light-blue); color: var(--gh-blue);">
+                <i class="bi bi-heart"></i>
             </div>
-            <div class="feature-icon" style="background-color: var(--gh-light-blue); color: var(--gh-blue);"><i class="bi bi-heart"></i></div>
         </div>
+
         <a href="/view_symptoms" class="btn btn-action w-100">Log Symptom</a>
     </div>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
