@@ -31,12 +31,13 @@
 
 <div class="container" style="max-width: 700px;">
     
+    <!-- ADD MEDICATION FORM -->
     <div class="card p-4">
         <h2 class="h6 fw-bold mb-4">Add Medication</h2>
         <form action="/add_med" method="POST">
             <div class="mb-3">
                 <label class="form-label">Medication Name</label>
-                <input type="text" name="name" class="form-control" placeholder="e.g., Amoxicillin, Clarithromycin..." required>
+                <input type="text" name="name" class="form-control" placeholder="e.g., Amoxicillin..." required>
             </div>
 
             <div class="row">
@@ -57,7 +58,7 @@
 
             <div class="mb-4">
                 <label class="form-label">Notes (Optional)</label>
-                <input type="text" name="instructions" class="form-control" placeholder="e.g., Before breakfast, with water...">
+                <input type="text" name="instructions" class="form-control" placeholder="e.g., Before breakfast...">
             </div>
 
             <button type="submit" class="btn btn-primary-gh w-100 text-white">
@@ -66,28 +67,31 @@
         </form>
     </div>
 
+    <!-- ADHERENCE SUMMARY -->
     <div class="card p-3">
         <div class="d-flex justify-content-between align-items-center">
+            {% set taken = meds|sum(attribute='taken_today') %}
+            {% set total = meds|sum(attribute='times_per_day') %}
             <div>
-                <h3 class="h6 fw-bold mb-1">Today's Medications</h3>
+                <h3 class="h6 fw-bold mb-1">Today's Progress</h3>
                 <p class="small text-muted mb-0">
-                    {% set taken = meds|sum(attribute='taken_today') %}
-                    {% set total = meds|sum(attribute='times_per_day') %}
-                    {{ taken }} of {{ total }} doses taken
+                    {{ taken }} of {{ total }} daily doses taken
                 </p>
             </div>
             <div class="text-end">
                 {% set percent = (taken / total * 100)|int if total > 0 else 0 %}
                 <span class="percentage-text">{{ percent }}%</span>
-                <div class="small text-muted">Complete</div>
+                <div class="small text-muted">Daily Goal</div>
             </div>
         </div>
     </div>
 
+    <!-- YOUR SCHEDULE -->
     <h2 class="h6 fw-bold mb-3">Your Schedule</h2>
-    
     {% if meds %}
         {% for med in meds %}
+        {% set med_total = med.times_per_day * med.duration_days %}
+        {% set med_percent = (med.total_taken / med_total * 100)|int if med_total > 0 else 0 %}
         <div class="card med-card border">
             <div class="d-flex justify-content-between align-items-start">
                 <div class="d-flex gap-3">
@@ -95,17 +99,25 @@
                     <div>
                         <h4 class="h6 fw-bold mb-1">{{ med.name }}</h4>
                         <div class="small text-muted mb-1">Schedule: {{ med.time }}</div>
-                        <div class="d-flex gap-2 small text-muted mb-2">
+                        <div class="d-flex gap-2 small text-muted">
                             <span><i class="bi bi-repeat"></i> {{ med.times_per_day }}x/day</span>
                             <span><i class="bi bi-calendar3"></i> {{ med.duration_days }} days</span>
                         </div>
+                        <div class="mt-2">
+                            <span class="percentage-text">{{ med_percent }}%</span>
+                            <span class="small text-muted">adherence</span>
+                        </div>
+                        <div class="small text-muted">{{ med.total_taken }} of {{ med_total }} doses taken</div>
                     </div>
                 </div>
-                <div class="d-flex flex-column gap-2 align-items-end">
-                    <form action="/mark_taken/{{ med.id }}" method="POST">
+                <div class="d-flex flex-column align-items-end gap-2">
+                    <form action="/mark_taken/{{ med.id }}" method="POST" class="mb-1">
                         <button type="submit" class="btn btn-success-gh text-white px-3">
                             <i class="bi bi-check-circle me-1"></i> Log Dose
                         </button>
+                    </form>
+                    <form action="/delete_med/{{ med.id }}" method="POST" onsubmit="return confirm('Delete this medication?');">
+                        <button type="submit" class="btn btn-outline-danger btn-sm px-2"><i class="bi bi-trash"></i> Delete</button>
                     </form>
                 </div>
             </div>
@@ -116,15 +128,23 @@
     {% endif %}
 </div>
 
+<!-- HIDDEN DATA STORAGE: THIS PREVENTS THE JAVASCRIPT ERRORS -->
+<ul id="hidden-med-data" style="display: none;">
+    {% for med in meds %}
+        {% if med.time %}
+            {% for t in med.time.split(',') %}
+                <li data-name="{{ med.name }}" data-time="{{ t.strip() }}"></li>
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+</ul>
+
 <script>
-    // Dynamic Time Input Generator
+    // 1. Dynamic Time Input Generator
     function generateTimeInputs() {
         const container = document.getElementById('time-inputs-container');
         const count = parseInt(document.getElementById('times_per_day').value) || 1;
-        
-        // Limit to reasonable number of doses
         const safeCount = Math.min(Math.max(count, 1), 6);
-        
         container.innerHTML = '';
         for (let i = 1; i <= safeCount; i++) {
             const wrapper = document.createElement('div');
@@ -135,6 +155,55 @@
             `;
             container.appendChild(wrapper);
         }
+    }
+
+    // 2. Medication Reminders (CLEAN JAVASCRIPT ONLY)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Request notification permission
+        if ("Notification" in window && Notification.permission !== "granted") {
+            Notification.requestPermission();
+        }
+
+        // SCRAPE DATA FROM HIDDEN HTML INSTEAD OF USING JINJA IN JS
+        var medSchedules = [];
+        document.querySelectorAll('#hidden-med-data li').forEach(function(item) {
+            medSchedules.push({
+                name: item.getAttribute('data-name'),
+                time: item.getAttribute('data-time')
+            });
+        });
+
+        var now = new Date();
+        medSchedules.forEach(function(med) {
+            if (!med.time) return;
+            var parts = med.time.split(":");
+            if (parts.length < 2) return;
+
+            var todayDose = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(parts[0]), parseInt(parts[1]), 0, 0);
+            
+            // Skip if the time has already passed today
+            if (todayDose.getTime() < now.getTime()) return;
+
+            // Schedule: 5 mins before
+            var beforeMs = todayDose.getTime() - now.getTime() - (5 * 60 * 1000);
+            if (beforeMs > 0) {
+                scheduleNotification("Upcoming Dose", `Take your ${med.name} at ${med.time}`, beforeMs);
+            }
+
+            // Schedule: 30 mins after
+            var afterMs = todayDose.getTime() - now.getTime() + (30 * 60 * 1000);
+            if (afterMs > 0) {
+                scheduleNotification("Dose Check-in", `Did you remember to take ${med.name}?`, afterMs);
+            }
+        });
+    });
+
+    function scheduleNotification(title, body, delay) {
+        setTimeout(() => {
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(title, { body: body });
+            }
+        }, delay);
     }
 </script>
 

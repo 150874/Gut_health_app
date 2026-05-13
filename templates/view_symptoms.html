@@ -23,9 +23,12 @@
 <body>
 
 <div class="header-nav mb-4">
-    <div class="container d-flex align-items-center">
-        <a href="/" class="text-dark me-3"><i class="bi bi-arrow-left"></i></a>
-        <h1 class="h5 mb-0 fw-bold">Symptom Tracker</h1>
+    <div class="container d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+            <a href="/" class="text-dark me-3"><i class="bi bi-arrow-left"></i></a>
+            <h1 class="h5 mb-0 fw-bold">Symptom Tracker</h1>
+        </div>
+        <a href="/" class="btn btn-outline-primary btn-sm rounded-pill">Home</a>
     </div>
 </div>
 
@@ -121,7 +124,9 @@
                         <small class="text-muted">Just now</small> <!-- Note: You can use a filter for 'time ago' later -->
                     </div>
                 </div>
-                <button class="btn btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
+                <form action="/delete_symptom/{{ log.id }}" method="POST" onsubmit="return confirm('Delete this symptom log?');">
+                    <button class="btn btn-link text-danger p-0"><i class="bi bi-trash3"></i></button>
+                </form>
             </div>
             {% endfor %}
         {% else %}

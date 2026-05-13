@@ -59,7 +59,22 @@
                 </div>
                 <h4 class="fw-bold">Medication Logs</h4>
                 <p class="text-muted small">View your current prescriptions and track your daily adherence progress.</p>
-                <a href="{{ url_for('view_meds') }}" class="btn-nav mt-auto">Manage Meds</a>
+                <a href="{{ url_for('view_meds') }}" class="btn-nav mt-auto mb-3">Manage Meds</a>
+                {% if meds %}
+                <div class="mt-2">
+                    <h6 class="fw-bold mb-2">Your Medications</h6>
+                    <ul class="list-group list-group-flush">
+                        {% for med in meds %}
+                            {% set med_total = med.times_per_day * med.duration_days %}
+                            {% set med_percent = (med.total_taken / med_total * 100)|int if med_total > 0 else 0 %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-1 border-0">
+                                <span>{{ med.name }}</span>
+                                <span class="badge bg-primary rounded-pill">{{ med_percent }}%</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
             </div>
         </div>
 
