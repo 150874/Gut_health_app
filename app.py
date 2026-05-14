@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from contextlib import contextmanager
 import logging
 
@@ -175,8 +175,7 @@ def diet_checker():
     status = request.args.get("status")
     
     with get_db() as conn:
-        recent_logs = conn.execute("SELECT food_name, timestamp FROM food_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (session["user_id"],)).fetchall()
-        
+        recent_logs = conn.execute("SELECT id, food_name, timestamp FROM food_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (session["user_id"],)).fetchall()
     return render_template("diet_checker.html", 
                            food=food, 
                            status=status, 
