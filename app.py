@@ -5,11 +5,24 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
 from contextlib import contextmanager
 import logging
+import joblib
+import pandas as pd
 
 # ---------------------------------------------------
 # APP SETUP
 # ---------------------------------------------------
 app = Flask(__name__)
+
+# --- MACHINE LEARNING SETUP ---
+try:
+    print("Loading Gut Health ML Model...")
+    flare_up_model = joblib.load('gut_health_model.pkl')
+    model_columns = joblib.load('model_columns.pkl')
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Warning: Could not load ML model. {e}")
+    flare_up_model = None
+
 app.secret_key = "gut-health-secret-key"
 
 logging.basicConfig(level=logging.INFO)
@@ -202,6 +215,48 @@ def check():
 
     # Redirect to the diet_checker page with result data in the URL
     return redirect(url_for("diet_checker", food=res_food, status=res_status))
+
+# ---------------------------------------------------
+# ROUTES: PREDICTION
+# ---------------------------------------------------
+
+@app.route('/predict_risk', methods=['POST'])
+def predict_risk():
+    if not flare_up_model:
+        return {"error": "Machine Learning model is offline"}, 500
+
+    # 1. Grab the data the user just submitted from the frontend form
+    # (Assuming we receive JSON data from a Javascript fetch call)
+    user_data = request.json 
+    
+    # Example of what user_data looks like:
+    # {'Age': 30, 'BMI': 24.5, 'Primary_Condition': 'GERD', 'H_Pylori_Result': 'Negative', 
+    #  'Meal_Type': 'Dinner', 'Meal_PRAL_Score': 6.5, 'Water_Consumed_ml': 100, 'Stress_At_Meal': 'High'}
+
+    try:
+        # 2. Convert the single user entry into a Pandas DataFrame
+        input_df = pd.DataFrame([user_data])
+
+        # 3. Process the text categories into 1s and 0s (One-Hot Encoding)
+        input_encoded = pd.get_dummies(input_df)
+
+        # 4. Make sure the columns match exactly what the model learned during training
+        # If the user didn't submit a category the model expects, fill it with a 0
+        for col in model_columns:
+            if col not in input_encoded.columns:
+                input_encoded[col] = 0
+        
+        # Reorder the columns to match the exact training order
+        input_encoded = input_encoded[model_columns]
+
+        # 5. Ask the model to predict the Flare-Up Score!
+        prediction = flare_up_model.predict(input_encoded)[0]
+
+        # 6. Return the score back to the website
+        return {"flare_up_risk_score": round(prediction, 1)}
+
+    except Exception as e:
+        return {"error": str(e)}, 400
 
 # ---------------------------------------------------
 # ROUTES: SYMPTOMS & MEDS
