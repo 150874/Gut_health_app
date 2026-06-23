@@ -164,6 +164,7 @@ def signup():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    first_time = bool(session.get("just_signed_up", False))
     if request.method == "POST":
         with get_db() as conn:
             user = conn.execute("SELECT * FROM users WHERE email = ?", (request.form["email"],)).fetchone()
@@ -173,7 +174,7 @@ def login():
             session["is_first_visit"] = just_signed_up
             return redirect(url_for("home"))
         flash("Invalid credentials.")
-    return render_template("login.html")
+    return render_template("login.html", first_time=first_time)
 
 @app.route("/logout") # Matches url_for in the new templates
 def logout_page():
