@@ -32,7 +32,13 @@
 
 <div class="container" style="max-width: 900px;">
     <div class="mb-4">
-        <h1 class="h3 fw-bold mb-1">Welcome back, {{ user_name }}!</h1>
+        <h1 class="h3 fw-bold mb-1">
+            {% if is_first_visit %}
+                Welcome, {{ user_name }}!
+            {% else %}
+                Welcome back, {{ user_name }}!
+            {% endif %}
+        </h1>
         <p class="text-muted">It&#39;s {{ current_date }}. Here is your gut health status at a glance.</p>
     </div>
 

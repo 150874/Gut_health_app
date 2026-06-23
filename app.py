@@ -119,6 +119,7 @@ def home():
         return redirect(url_for("login"))
 
     uid = session["user_id"]
+    is_first_visit = session.pop("is_first_visit", False)
     today_str = date.today().isoformat()
     display_date = date.today().strftime("%B %d, %Y")
 
@@ -137,6 +138,7 @@ def home():
 
     return render_template("index.html", 
                            user_name=session["user_name"], 
+                           is_first_visit=is_first_visit,
                            current_date=display_date, 
                            meals=meals, 
                            meds_count=taken_doses, 
@@ -152,6 +154,8 @@ def signup():
             with get_db() as conn:
                 conn.execute("INSERT INTO users (name, email, password, condition) VALUES (?, ?, ?, ?)",
                              (request.form["name"], request.form["email"], hashed_pw, request.form["condition"]))
+            # Mark this browser session so the next successful login can show a first-time welcome.
+            session["just_signed_up"] = True
             flash("Account created!")
             return redirect(url_for("login"))
         except:
@@ -164,7 +168,9 @@ def login():
         with get_db() as conn:
             user = conn.execute("SELECT * FROM users WHERE email = ?", (request.form["email"],)).fetchone()
         if user and check_password_hash(user["password"], request.form["password"]):
+            just_signed_up = bool(session.pop("just_signed_up", False))
             session.update({"user_id": user["id"], "user_name": user["name"], "condition": user["condition"]})
+            session["is_first_visit"] = just_signed_up
             return redirect(url_for("home"))
         flash("Invalid credentials.")
     return render_template("login.html")
