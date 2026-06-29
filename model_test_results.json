@@ -1,0 +1,11 @@
+{
+  "mae": 1.094,
+  "flare_threshold": 5,
+  "recall": 0.453,
+  "confusion_matrix": {
+    "tn": 11667,
+    "fp": 328,
+    "fn": 1316,
+    "tp": 1089
+  }
+}

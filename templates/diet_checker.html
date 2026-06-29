@@ -214,8 +214,15 @@
                 <i class="bi bi-magic"></i> Predict Flare-Up Risk
             </button>
 
-            <div id="aiResultBox" class="ai-box mb-3">
-                </div>
+            <div id="aiResultBox" class="ai-box mb-3" {% if prediction_result %}style="display:block;"{% endif %}>
+                {% if prediction_result %}
+                    <i class="bi bi-stars"></i>
+                    <strong>{{ prediction_result.title }}</strong>
+                    Risk Score: {{ prediction_result.score }}/10<br>
+                    {{ prediction_result.message }}
+                    <div class="small mt-2 opacity-75">Generated at: {{ prediction_result.generated_at }}</div>
+                {% endif %}
+            </div>
 
             <button type="submit" class="btn btn-primary-gh w-100 py-2">
                 <i class="bi bi-journal-plus"></i> Log Meal to History
@@ -302,27 +309,23 @@
                 aiBox.style.backgroundColor = "#f8d7da";
             } else {
                 const score = data.flare_up_risk_score;
-                
-                // Determine styling and message based on the severity
-                let severityHTML = "";
-                if (score >= 7) {
+
+                // Style based on server-provided risk level
+                if (data.risk_level === 'high') {
                     aiBox.style.backgroundColor = "#ffebee";
                     aiBox.style.color = "#c62828";
                     aiBox.style.borderColor = "#ef9a9a";
-                    severityHTML = `<strong>DANGER!</strong> Risk Score: ${score}/10<br>High probability of a flare-up. Consider drinking more water or changing the meal.`;
-                } else if (score >= 4) {
+                } else if (data.risk_level === 'moderate') {
                     aiBox.style.backgroundColor = "#fff8e1";
                     aiBox.style.color = "#f57f17";
                     aiBox.style.borderColor = "#ffe082";
-                    severityHTML = `<strong>Warning.</strong> Risk Score: ${score}/10<br>Moderate risk. Proceed with caution.`;
                 } else {
                     aiBox.style.backgroundColor = "#e8f5e9";
                     aiBox.style.color = "#2e7d32";
                     aiBox.style.borderColor = "#a5d6a7";
-                    severityHTML = `<strong>All Clear!</strong> Risk Score: ${score}/10<br>This meal profile looks safe for your gut health.`;
                 }
 
-                aiBox.innerHTML = `<i class="bi bi-stars"></i> ${severityHTML}`;
+                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${data.title}</strong> Risk Score: ${score}/10<br>${data.message}<div class="small mt-2 opacity-75">Generated at: ${data.generated_at}</div>`;
             }
         } catch (error) {
             aiBox.innerHTML = `<i class="bi bi-wifi-off"></i> Could not connect to AI Engine. Make sure Flask is running!`;

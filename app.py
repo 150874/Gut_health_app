@@ -7,10 +7,34 @@ from contextlib import contextmanager
 import logging
 import joblib
 import pandas as pd
+import json
+import os
+import secrets
+
+
+def load_env_file(path):
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            # Keep shell-exported values as highest priority.
+            if key and key not in os.environ:
+                os.environ[key] = value
 
 # ---------------------------------------------------
 # APP SETUP
 # ---------------------------------------------------
+if os.path.exists(".env"):
+    load_env_file(".env")
+elif os.path.exists(".env.example"):
+    load_env_file(".env.example")
+
 app = Flask(__name__)
 
 # --- MACHINE LEARNING SETUP ---
@@ -23,7 +47,15 @@ except Exception as e:
     print(f"Warning: Could not load ML model. {e}")
     flare_up_model = None
 
-app.secret_key = "gut-health-secret-key"
+try:
+    with open('model_test_results.json', 'r', encoding='utf-8') as f:
+        model_test_results = json.load(f)
+except Exception:
+    model_test_results = None
+
+app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
+if not os.getenv("FLASK_SECRET_KEY"):
+    logging.warning("FLASK_SECRET_KEY is not set. Using an ephemeral key for this run.")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -64,6 +96,39 @@ CONDITION_COLUMN_MAP = {
     "hpylori": "hpylori_status"
 }
 
+
+def get_admin_emails():
+    raw = os.getenv("ADMIN_EMAILS", "")
+    return {email.strip().lower() for email in raw.split(",") if email.strip()}
+
+
+def is_admin_email(email):
+    return email.strip().lower() in get_admin_emails()
+
+
+def build_prediction_result(score):
+    score = round(float(score), 1)
+    if score >= 7:
+        level = "high"
+        title = "DANGER!"
+        message = "High probability of a flare-up. Consider drinking more water or changing the meal."
+    elif score >= 4:
+        level = "moderate"
+        title = "Warning."
+        message = "Moderate risk. Proceed with caution."
+    else:
+        level = "low"
+        title = "All Clear!"
+        message = "This meal profile looks safe for your gut health."
+
+    return {
+        "score": score,
+        "level": level,
+        "title": title,
+        "message": message,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+    }
+
 # ---------------------------------------------------
 # DATABASE CONNECTION
 # ---------------------------------------------------
@@ -88,7 +153,7 @@ def init_db():
     with get_db() as conn:
         c = conn.cursor()
         # Create all tables (Users, Food Rules, Logs, Symptoms, Knowledge, Medications)
-        c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password TEXT, condition TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password TEXT, condition TEXT, is_admin INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1)")
         c.execute("CREATE TABLE IF NOT EXISTS food_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, food_name TEXT UNIQUE, gastritis_status TEXT, gerd_status TEXT, hpylori_status TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS food_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, food_name TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
         c.execute("CREATE TABLE IF NOT EXISTS symptoms (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, symptom TEXT, severity TEXT, note TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
@@ -101,6 +166,14 @@ def init_db():
         if 'total_taken' not in columns:
                 c.execute("ALTER TABLE medications ADD COLUMN total_taken INTEGER DEFAULT 0")
 
+        # --- Migration: Add is_admin column if missing ---
+        c.execute("PRAGMA table_info(users)")
+        user_columns = [row[1] for row in c.fetchall()]
+        if 'is_admin' not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+        if 'is_active' not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+
         # Seed data if empty
         c.execute("SELECT COUNT(*) FROM food_rules")
         if c.fetchone()[0] == 0:
@@ -110,6 +183,19 @@ def init_db():
 def is_logged_in():
     return "user_id" in session
 
+
+def is_admin_user():
+    return bool(session.get("is_admin", False))
+
+
+def require_admin():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+    if not is_admin_user():
+        flash("You are not authorized to view the admin page.")
+        return redirect(url_for("home"))
+    return None
+
 # ---------------------------------------------------
 # ROUTES: DASHBOARD & AUTH
 # ---------------------------------------------------
@@ -117,6 +203,8 @@ def is_logged_in():
 def home():
     if not is_logged_in():
         return redirect(url_for("login"))
+    if is_admin_user():
+        return redirect(url_for("admin_dashboard"))
 
     uid = session["user_id"]
     is_first_visit = session.pop("is_first_visit", False)
@@ -146,19 +234,83 @@ def home():
                            progress=progress,
                            meds=meds)
 
+
+@app.route("/admin")
+def admin_dashboard():
+    guard = require_admin()
+    if guard:
+        return guard
+
+    with get_db() as conn:
+        admin_users = conn.execute(
+            "SELECT id, name, email, condition, is_admin, is_active FROM users ORDER BY is_admin DESC, id DESC"
+        ).fetchall()
+
+    return render_template("admin.html", model_test_results=model_test_results, admin_users=admin_users)
+
+
+@app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
+def admin_toggle_user_role(user_id):
+    guard = require_admin()
+    if guard:
+        return guard
+
+    current_admin_id = session["user_id"]
+    with get_db() as conn:
+        target = conn.execute("SELECT id, is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not target:
+            flash("User not found.")
+            return redirect(url_for("admin_dashboard"))
+
+        if target["id"] == current_admin_id and target["is_admin"]:
+            flash("You cannot remove your own admin role while logged in.")
+            return redirect(url_for("admin_dashboard"))
+
+        new_role = 0 if target["is_admin"] else 1
+        conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_role, user_id))
+
+    flash("User role updated.")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/users/<int:user_id>/toggle-active", methods=["POST"])
+def admin_toggle_user_active(user_id):
+    guard = require_admin()
+    if guard:
+        return guard
+
+    current_admin_id = session["user_id"]
+    with get_db() as conn:
+        target = conn.execute("SELECT id, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not target:
+            flash("User not found.")
+            return redirect(url_for("admin_dashboard"))
+
+        if target["id"] == current_admin_id and target["is_active"]:
+            flash("You cannot deactivate your own account while logged in.")
+            return redirect(url_for("admin_dashboard"))
+
+        new_status = 0 if target["is_active"] else 1
+        conn.execute("UPDATE users SET is_active = ? WHERE id = ?", (new_status, user_id))
+
+    flash("User status updated.")
+    return redirect(url_for("admin_dashboard"))
+
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
         hashed_pw = generate_password_hash(request.form["password"])
+        email = request.form["email"].strip().lower()
+        is_admin = 1 if is_admin_email(email) else 0
         try:
             with get_db() as conn:
-                conn.execute("INSERT INTO users (name, email, password, condition) VALUES (?, ?, ?, ?)",
-                             (request.form["name"], request.form["email"], hashed_pw, request.form["condition"]))
+                conn.execute("INSERT INTO users (name, email, password, condition, is_admin) VALUES (?, ?, ?, ?, ?)",
+                             (request.form["name"], email, hashed_pw, request.form["condition"], is_admin))
             # Mark this browser session so the next successful login can show a first-time welcome.
             session["just_signed_up"] = True
             flash("Account created!")
             return redirect(url_for("login"))
-        except:
+        except sqlite3.IntegrityError:
             flash("Email already exists.")
     return render_template("signup.html")
 
@@ -166,13 +318,26 @@ def signup():
 def login():
     first_time = bool(session.get("just_signed_up", False))
     if request.method == "POST":
+        login_email = request.form["email"].strip().lower()
         with get_db() as conn:
-            user = conn.execute("SELECT * FROM users WHERE email = ?", (request.form["email"],)).fetchone()
+            user = conn.execute("SELECT * FROM users WHERE email = ?", (login_email,)).fetchone()
+            if user and is_admin_email(login_email) and not user["is_admin"]:
+                conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (user["id"],))
+                user = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+        if user and not user["is_active"]:
+            flash("This account is deactivated. Contact an admin.")
+            return render_template("login.html", first_time=first_time)
         if user and check_password_hash(user["password"], request.form["password"]):
             just_signed_up = bool(session.pop("just_signed_up", False))
-            session.update({"user_id": user["id"], "user_name": user["name"], "condition": user["condition"]})
+            session.update({
+                "user_id": user["id"],
+                "user_name": user["name"],
+                "condition": user["condition"],
+                "is_admin": bool(user["is_admin"])
+            })
             session["is_first_visit"] = just_signed_up
-            return redirect(url_for("home"))
+            target_endpoint = "admin_dashboard" if session.get("is_admin") else "home"
+            return redirect(url_for(target_endpoint))
         flash("Invalid credentials.")
     return render_template("login.html", first_time=first_time)
 
@@ -200,6 +365,7 @@ def diet_checker():
                            food=food, 
                            status=status, 
                            recent_logs=recent_logs, 
+                           prediction_result=session.get("last_prediction"),
                            condition=session["condition"])
 
 @app.route("/check", methods=["POST"])
@@ -229,6 +395,9 @@ def check():
 
 @app.route('/predict_risk', methods=['POST'])
 def predict_risk():
+    if not is_logged_in():
+        return {"error": "Unauthorized"}, 401
+
     if not flare_up_model:
         return {"error": "Machine Learning model is offline"}, 500
 
@@ -258,9 +427,19 @@ def predict_risk():
 
         # 5. Ask the model to predict the Flare-Up Score!
         prediction = flare_up_model.predict(input_encoded)[0]
+        result = build_prediction_result(prediction)
 
-        # 6. Return the score back to the website
-        return {"flare_up_risk_score": round(prediction, 1)}
+        # Keep the latest prediction available to the template.
+        session["last_prediction"] = result
+
+        # 6. Return the score and interpretation back to the website
+        return {
+            "flare_up_risk_score": result["score"],
+            "risk_level": result["level"],
+            "title": result["title"],
+            "message": result["message"],
+            "generated_at": result["generated_at"]
+        }
 
     except Exception as e:
         return {"error": str(e)}, 400
@@ -278,6 +457,8 @@ def view_symptoms():
 
 @app.route("/add_symptom", methods=["POST"])
 def add_symptom():
+    if not is_logged_in():
+        return redirect(url_for("login"))
     with get_db() as conn:
         conn.execute("INSERT INTO symptoms (user_id, symptom, severity, note) VALUES (?, ?, ?, ?)",
                      (session["user_id"], request.form["symptom"], request.form.get("severity", "Mild"), request.form.get("note", "")))
@@ -293,6 +474,8 @@ def view_meds():
 
 @app.route("/add_med", methods=["POST"])
 def add_med():
+    if not is_logged_in():
+        return redirect(url_for("login"))
     # Join multiple time inputs into a single string for storage
     times_str = ", ".join(request.form.getlist("time"))
     with get_db() as conn:
@@ -304,6 +487,8 @@ def add_med():
 
 @app.route("/mark_taken/<int:med_id>", methods=["POST"])
 def mark_taken(med_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
     with get_db() as conn:
         med = conn.execute("SELECT * FROM medications WHERE id = ? AND user_id = ?", (med_id, session["user_id"])).fetchone()
         if not med:
@@ -365,4 +550,5 @@ def insights():
 
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True)
+    debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+    app.run(debug=debug_mode)
