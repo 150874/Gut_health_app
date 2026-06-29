@@ -171,6 +171,11 @@
             color: #0b6b43;
             border-color: #9fd8be;
         }
+        .risk-pill-uncertain {
+            background: #eef0f4;
+            color: #44566a;
+            border-color: #cfd8e2;
+        }
         .final-reco {
             margin-top: 0.8rem;
             border-radius: 12px;
@@ -402,7 +407,7 @@
                     <i class="bi bi-stars"></i>
                     <strong>{{ prediction_result.title }}</strong>
                     <span class="risk-pill risk-pill-{{ initial_level }}">
-                        <i class="bi {% if initial_level == 'high' %}bi-traffic-cone{% elif initial_level == 'moderate' %}bi-exclamation-diamond{% else %}bi-check-circle{% endif %}"></i>
+                        <i class="bi {% if initial_level == 'high' %}bi-traffic-cone{% elif initial_level == 'moderate' %}bi-exclamation-diamond{% elif initial_level == 'uncertain' %}bi-question-circle{% else %}bi-check-circle{% endif %}"></i>
                         {{ initial_level }} Risk
                     </span>
                     Risk Score: {{ prediction_result.score }}/10<br>
@@ -587,10 +592,10 @@
         const foodName = document.getElementById('foodInput').value.trim();
 
         function buildRiskPill(level) {
-            const normalized = (level === 'high' || level === 'moderate' || level === 'low') ? level : 'low';
+            const normalized = (level === 'high' || level === 'moderate' || level === 'low' || level === 'uncertain') ? level : 'low';
             const icon = normalized === 'high'
                 ? 'bi-traffic-cone'
-                : (normalized === 'moderate' ? 'bi-exclamation-diamond' : 'bi-check-circle');
+                : (normalized === 'moderate' ? 'bi-exclamation-diamond' : (normalized === 'uncertain' ? 'bi-question-circle' : 'bi-check-circle'));
             return `<span class="risk-pill risk-pill-${normalized}"><i class="bi ${icon}"></i>${normalized} Risk</span>`;
         }
 
@@ -732,6 +737,10 @@
                     aiBox.style.backgroundColor = "#fff8e1";
                     aiBox.style.color = "#f57f17";
                     aiBox.style.borderColor = "#ffe082";
+                } else if (data.risk_level === 'uncertain') {
+                    aiBox.style.backgroundColor = "#f3f6fa";
+                    aiBox.style.color = "#41576b";
+                    aiBox.style.borderColor = "#d0dbe6";
                 } else {
                     aiBox.style.backgroundColor = "#e8f5e9";
                     aiBox.style.color = "#2e7d32";

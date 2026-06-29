@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Model Performance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --ink: #17374f;
+            --blue: #1f5f8f;
+            --blue-soft: #e8f3fb;
+            --mint-soft: #ebf9ef;
+            --amber-soft: #fff6df;
+            --border: #d7e6ef;
+            --bg: #f5fbff;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--ink);
+            min-height: 100vh;
+            background:
+                radial-gradient(56rem 24rem at -10% -8%, #c9e8f8 0%, transparent 55%),
+                radial-gradient(40rem 20rem at 105% 0%, #d9f3e6 0%, transparent 55%),
+                linear-gradient(180deg, #fbfeff 0%, var(--bg) 100%);
+        }
+        .admin-nav {
+            background: rgba(255, 255, 255, 0.9);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(8px);
+        }
+        .brand-pill {
+            border: 1px solid #c8deec;
+            background: var(--blue-soft);
+            color: var(--blue);
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border-radius: 999px;
+            padding: 0.22rem 0.55rem;
+            font-weight: 700;
+        }
+        .panel {
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            box-shadow: 0 14px 28px rgba(20, 70, 104, 0.08);
+            background: rgba(255, 255, 255, 0.95);
+            margin-bottom: 18px;
+        }
+        .hero {
+            background: linear-gradient(140deg, #f1f9ff 0%, #f6fff9 100%);
+            border-color: #cfe3ef;
+        }
+        .metric-chip {
+            border: 1px solid var(--border);
+            background: #fff;
+            border-radius: 14px;
+            padding: 0.85rem 0.9rem;
+            height: 100%;
+        }
+        .metric-label {
+            color: #577184;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+        .metric-value {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: #1a3d59;
+        }
+        .chart-card {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 0.9rem;
+            background: #fff;
+            height: 330px;
+        }
+        .chart-card canvas {
+            width: 100% !important;
+            height: 255px !important;
+        }
+        .table thead th {
+            color: #4e6677;
+            text-transform: uppercase;
+            font-size: 0.74rem;
+            letter-spacing: 0.04em;
+            border-bottom-width: 1px;
+        }
+        .history-meta {
+            color: #577184;
+            font-size: 0.82rem;
+        }
+        .feature-row {
+            border-bottom: 1px dashed #d7e6ef;
+            padding: 0.42rem 0;
+        }
+        .feature-row:last-child {
+            border-bottom: none;
+        }
+        .feature-name {
+            font-weight: 700;
+            color: #193a55;
+        }
+        .feature-bar {
+            width: 100%;
+            background: #e5f0f8;
+            height: 8px;
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 0.22rem;
+        }
+        .feature-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #1f5f8f 0%, #22a373 100%);
+            border-radius: 999px;
+        }
+        @media (max-width: 576px) {
+            .chart-card {
+                height: 285px;
+            }
+            .chart-card canvas {
+                height: 215px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-light admin-nav py-3 mb-4 shadow-sm">
+    <div class="container">
+        <a class="navbar-brand d-flex align-items-center fw-bold" href="{{ url_for('admin_dashboard') }}">
+            <i class="bi bi-heart-pulse-fill text-primary me-2"></i>
+            <div>
+                <div>GutHealth</div>
+                <div class="brand-pill mt-1">Admin Console</div>
+            </div>
+        </a>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-primary btn-sm rounded-pill">Overview</a>
+            <a href="{{ url_for('admin_model_performance') }}" class="btn btn-primary btn-sm rounded-pill">Model Performance</a>
+            <a href="{{ url_for('admin_user_management') }}" class="btn btn-outline-primary btn-sm rounded-pill">User Management</a>
+            <a href="{{ url_for('logout_page') }}" class="btn btn-outline-danger btn-sm rounded-pill">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="max-width: 1120px;">
+    {% if model_test_results %}
+    <div class="panel hero p-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+            <div>
+                <h1 class="h3 fw-bold mb-1">Model Performance Center</h1>
+                <p class="text-muted mb-0">A cleaner view of model quality, trend, and target gap.</p>
+            </div>
+            <span class="badge text-bg-success">Latest Run: {{ model_test_results.trained_at or 'N/A' }}</span>
+        </div>
+        <div class="history-meta mb-2">
+            <strong>Samples:</strong> {{ model_test_results.sample_count or 'N/A' }}
+            <span class="mx-2">|</span>
+            <strong>Features:</strong> {{ model_test_results.feature_count or 'N/A' }}
+            <span class="mx-2">|</span>
+            <strong>Threshold:</strong> {{ model_test_results.flare_threshold or 'N/A' }}
+        </div>
+        <div class="row g-3 mt-1">
+            <div class="col-md-3"><div class="metric-chip"><div class="metric-label">F1 (Flare)</div><div class="metric-value">{{ model_test_results.f1 if model_test_results.f1 is not none else 'N/A' }}</div></div></div>
+            <div class="col-md-3"><div class="metric-chip"><div class="metric-label">Recall</div><div class="metric-value">{{ model_test_results.recall if model_test_results.recall is not none else 'N/A' }}</div></div></div>
+            <div class="col-md-3"><div class="metric-chip"><div class="metric-label">Precision</div><div class="metric-value">{{ model_test_results.precision if model_test_results.precision is not none else 'N/A' }}</div></div></div>
+            <div class="col-md-3"><div class="metric-chip"><div class="metric-label">ROC-AUC</div><div class="metric-value">{{ model_test_results.roc_auc if model_test_results.roc_auc is not none else 'N/A' }}</div></div></div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="panel p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="fw-bold mb-0">Expectation vs Actual</h5>
+                    <span class="badge text-bg-light border">Target Gap</span>
+                </div>
+                <div class="chart-card">
+                    <canvas id="expectationVsActualChart" width="720" height="255"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="panel p-3" style="background:#fffdf5; border-color:#f2e3b3;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="fw-bold mb-0">Quality Trend</h5>
+                    <span class="badge text-bg-warning text-dark">Recent Runs</span>
+                </div>
+                <div class="chart-card" style="height: 300px;">
+                    <canvas id="trainingTrendChart" width="500" height="230"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if model_test_results.cross_validation %}
+    <div class="panel p-4">
+        <h5 class="fw-bold mb-3">Cross-Validation Summary ({{ model_test_results.cross_validation.folds }} folds)</h5>
+        <div class="row g-2">
+            <div class="col-md-3"><strong>MAE:</strong> {{ model_test_results.cross_validation.mae_mean }}</div>
+            <div class="col-md-3"><strong>RMSE:</strong> {{ model_test_results.cross_validation.rmse_mean }}</div>
+            <div class="col-md-3"><strong>R2:</strong> {{ model_test_results.cross_validation.r2_mean }}</div>
+            <div class="col-md-3"><strong>F1:</strong> {{ model_test_results.cross_validation.f1_mean }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="panel p-4">
+        <h5 class="fw-bold mb-3">Confusion Matrix</h5>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Pred: No Flare</th>
+                        <th>Pred: Flare</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <th>True: No Flare</th>
+                        <td>{{ model_test_results.confusion_matrix.tn }}</td>
+                        <td>{{ model_test_results.confusion_matrix.fp }}</td>
+                    </tr>
+                    <tr>
+                        <th>True: Flare</th>
+                        <td>{{ model_test_results.confusion_matrix.fn }}</td>
+                        <td>{{ model_test_results.confusion_matrix.tp }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="panel p-4">
+        <h5 class="fw-bold mb-2">No model metrics available</h5>
+        <p class="text-muted mb-0">Run your training script to generate model_test_results.json, then refresh this page.</p>
+    </div>
+    {% endif %}
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Training History</h5>
+            <span class="badge text-bg-info">Recent Runs</span>
+        </div>
+        {% if training_history %}
+        <div class="table-responsive mb-2">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Trained At</th>
+                        <th>MAE</th>
+                        <th>RMSE</th>
+                        <th>Recall</th>
+                        <th>Precision</th>
+                        <th>F1</th>
+                        <th>ROC-AUC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in training_history %}
+                    <tr>
+                        <td>{{ run.trained_at or 'N/A' }}</td>
+                        <td>{{ run.mae if run.mae is not none else 'N/A' }}</td>
+                        <td>{{ run.rmse if run.rmse is not none else 'N/A' }}</td>
+                        <td>{{ run.recall if run.recall is not none else 'N/A' }}</td>
+                        <td>{{ run.precision if run.precision is not none else 'N/A' }}</td>
+                        <td>{{ run.f1 if run.f1 is not none else 'N/A' }}</td>
+                        <td>{{ run.roc_auc if run.roc_auc is not none else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No training history yet. Run train_model.py to generate history data.</p>
+        {% endif %}
+    </div>
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Top Model Features</h5>
+            <span class="badge text-bg-dark">At Bottom (Requested)</span>
+        </div>
+        {% if feature_importance.top_features %}
+        <p class="small text-muted mb-3">From run: {{ feature_importance.trained_at or 'N/A' }}</p>
+        {% for item in feature_importance.top_features %}
+        <div class="feature-row">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="feature-name">{{ item.feature }}</div>
+                <div class="small text-muted">{{ item.importance }}</div>
+            </div>
+            <div class="feature-bar">
+                <div class="feature-fill" style="width: {{ (item.importance * 100)|round(2) }}%;"></div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted mb-0">No feature importance file yet. Run train_model.py to generate model_feature_importance.json.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% set actual_metrics = {
+    'recall': (model_test_results.recall if model_test_results and model_test_results.recall is not none else 0),
+    'precision': (model_test_results.precision if model_test_results and model_test_results.precision is not none else 0),
+    'f1': (model_test_results.f1 if model_test_results and model_test_results.f1 is not none else 0),
+    'balanced_accuracy': (model_test_results.balanced_accuracy if model_test_results and model_test_results.balanced_accuracy is not none else 0),
+    'roc_auc': (model_test_results.roc_auc if model_test_results and model_test_results.roc_auc is not none else 0),
+    'r2': (model_test_results.r2 if model_test_results and model_test_results.r2 is not none else 0)
+} %}
+<script id="actualMetricsData" type="application/json">{{ actual_metrics | tojson }}</script>
+<script id="trainingHistoryData" type="application/json">{{ training_history | tojson }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        const chartEl = document.getElementById('expectationVsActualChart');
+        if (!chartEl) return;
+
+        const expected = {
+            recall: 0.75,
+            precision: 0.75,
+            f1: 0.70,
+            balanced_accuracy: 0.70,
+            roc_auc: 0.85,
+            r2: 0.50,
+        };
+
+        let actual = { recall: 0, precision: 0, f1: 0, balanced_accuracy: 0, roc_auc: 0, r2: 0 };
+        const metricsEl = document.getElementById('actualMetricsData');
+        if (metricsEl) {
+            try {
+                const parsed = JSON.parse(metricsEl.textContent || '{}');
+                actual = {
+                    recall: Number(parsed.recall || 0),
+                    precision: Number(parsed.precision || 0),
+                    f1: Number(parsed.f1 || 0),
+                    balanced_accuracy: Number(parsed.balanced_accuracy || 0),
+                    roc_auc: Number(parsed.roc_auc || 0),
+                    r2: Number(parsed.r2 || 0),
+                };
+            } catch (err) {
+                actual = { recall: 0, precision: 0, f1: 0, balanced_accuracy: 0, roc_auc: 0, r2: 0 };
+            }
+        }
+
+        new Chart(chartEl, {
+            type: 'bar',
+            data: {
+                labels: ['Recall', 'Precision', 'F1', 'Balanced Acc', 'ROC-AUC', 'R2'],
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Expectation',
+                        data: [expected.recall, expected.precision, expected.f1, expected.balanced_accuracy, expected.roc_auc, expected.r2],
+                        borderColor: 'rgba(31, 95, 143, 0.95)',
+                        backgroundColor: 'rgba(31, 95, 143, 0.15)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.25,
+                        fill: false,
+                    },
+                    {
+                        label: 'Actual',
+                        data: [actual.recall, actual.precision, actual.f1, actual.balanced_accuracy, actual.roc_auc, actual.r2],
+                        backgroundColor: ['#2eb67d', '#2eb67d', '#2eb67d', '#2eb67d', '#2eb67d', '#2eb67d'],
+                        borderColor: '#1f8f61',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        min: 0,
+                        max: 1,
+                        ticks: { stepSize: 0.1 },
+                        grid: { color: 'rgba(125, 156, 176, 0.2)' }
+                    },
+                    x: { grid: { display: false } }
+                },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(3)}`
+                        }
+                    }
+                }
+            }
+        });
+    })();
+
+    (function () {
+        const trendEl = document.getElementById('trainingTrendChart');
+        if (!trendEl) return;
+
+        let history = [];
+        const historyEl = document.getElementById('trainingHistoryData');
+        if (historyEl) {
+            try {
+                history = JSON.parse(historyEl.textContent || '[]');
+            } catch (err) {
+                history = [];
+            }
+        }
+
+        const labels = history.map((run, index) => {
+            const stamp = String(run.trained_at || `Run ${index + 1}`);
+            return stamp.slice(5, 16).replace('T', ' ');
+        }).reverse();
+
+        const f1Series = history.map((run) => Number(run.f1 || 0)).reverse();
+        const recallSeries = history.map((run) => Number(run.recall || 0)).reverse();
+        const precisionSeries = history.map((run) => Number(run.precision || 0)).reverse();
+
+        new Chart(trendEl, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'F1',
+                        data: f1Series,
+                        borderColor: '#1f5f8f',
+                        backgroundColor: 'rgba(31, 95, 143, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        tension: 0.25,
+                    },
+                    {
+                        label: 'Recall',
+                        data: recallSeries,
+                        borderColor: '#2ea36e',
+                        backgroundColor: 'rgba(46, 163, 110, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        tension: 0.25,
+                    },
+                    {
+                        label: 'Precision',
+                        data: precisionSeries,
+                        borderColor: '#d3922f',
+                        backgroundColor: 'rgba(211, 146, 47, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        tension: 0.25,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        min: 0,
+                        max: 1,
+                        ticks: { stepSize: 0.1 },
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'top' }
+                }
+            }
+        });
+    })();
+</script>
+</body>
+</html>

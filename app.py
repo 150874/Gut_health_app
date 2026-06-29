@@ -10,6 +10,7 @@ import pandas as pd
 import json
 import os
 import secrets
+from admin_routes import register_admin_routes
 
 
 def load_env_file(path):
@@ -74,6 +75,10 @@ def load_feature_importance():
     except Exception:
         pass
     return {"trained_at": None, "top_features": []}
+
+
+def get_model_test_results():
+    return model_test_results
 
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 if not os.getenv("FLASK_SECRET_KEY"):
@@ -360,6 +365,31 @@ def build_prediction_result(score):
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
 
+
+def assess_prediction_quality(food_name, pral_source, model_columns):
+    food_feature_name = f"Food_Name_{food_name}"
+    has_food_feature = food_feature_name in model_columns
+
+    if has_food_feature and pral_source == "knowledge_base":
+        return {
+            "quality": "high",
+            "is_uncertain": False,
+            "reason": "Food exists in trained vocabulary and PRAL came from knowledge base."
+        }
+
+    if has_food_feature or pral_source == "estimated_from_food":
+        return {
+            "quality": "medium",
+            "is_uncertain": False,
+            "reason": "Prediction uses partial food signal with estimated acidity profile."
+        }
+
+    return {
+        "quality": "low",
+        "is_uncertain": True,
+        "reason": "Food is not in trained vocabulary and PRAL is a fallback estimate."
+    }
+
 # ---------------------------------------------------
 # DATABASE CONNECTION
 # ---------------------------------------------------
@@ -509,143 +539,19 @@ def home():
                            meds=meds)
 
 
-@app.route("/admin")
-def admin_dashboard():
-    guard = require_admin()
-    if guard:
-        return guard
-
-    training_history = load_training_history()
-    recent_training_history = list(reversed(training_history[-10:]))
-    feature_importance = load_feature_importance()
-
-    with get_db() as conn:
-        admin_users = conn.execute(
-            "SELECT id, name, email, condition, is_admin, is_active FROM users ORDER BY is_admin DESC, id DESC"
-        ).fetchall()
-        pral_entries = conn.execute(
-            "SELECT id, food_name, pral_score, source, updated_at FROM food_pral ORDER BY LOWER(food_name) ASC"
-        ).fetchall()
-        audit_logs = conn.execute(
-            "SELECT a.created_at, a.action_type, a.target, a.details, u.name AS admin_name "
-            "FROM admin_audit_logs a LEFT JOIN users u ON u.id = a.admin_user_id "
-            "ORDER BY a.id DESC LIMIT 25"
-        ).fetchall()
-
-    return render_template(
-        "admin.html",
-        model_test_results=model_test_results,
-        admin_users=admin_users,
-        training_history=recent_training_history,
-        pral_entries=pral_entries,
-        feature_importance=feature_importance,
-        audit_logs=audit_logs
-    )
-
-
-@app.route("/admin/pral/add", methods=["POST"])
-def admin_add_pral():
-    guard = require_admin()
-    if guard:
-        return guard
-
-    food_name = request.form.get("food_name", "").strip()
-    pral_score = to_float(request.form.get("pral_score"), 0)
-    if not food_name:
-        flash("Food name is required.")
-        return redirect(url_for("admin_dashboard"))
-
-    with get_db() as conn:
-        conn.execute(
-            "INSERT INTO food_pral (food_name, pral_score, source, updated_at) VALUES (?, ?, 'manual', CURRENT_TIMESTAMP) "
-            "ON CONFLICT(food_name) DO UPDATE SET pral_score = excluded.pral_score, source = 'manual', updated_at = CURRENT_TIMESTAMP",
-            (food_name, pral_score)
-        )
-    log_admin_action("pral_upsert", food_name, f"pral_score={pral_score}")
-    flash("PRAL entry saved.")
-    return redirect(url_for("admin_dashboard"))
-
-
-@app.route("/admin/pral/<int:entry_id>/delete", methods=["POST"])
-def admin_delete_pral(entry_id):
-    guard = require_admin()
-    if guard:
-        return guard
-
-    with get_db() as conn:
-        target = conn.execute("SELECT food_name, pral_score FROM food_pral WHERE id = ?", (entry_id,)).fetchone()
-        conn.execute("DELETE FROM food_pral WHERE id = ?", (entry_id,))
-    if target:
-        log_admin_action("pral_delete", target["food_name"], f"pral_score={target['pral_score']}")
-    flash("PRAL entry deleted.")
-    return redirect(url_for("admin_dashboard"))
-
-
-@app.route("/api/pral-lookup")
-def pral_lookup_api():
-    if not is_logged_in():
-        return {"error": "Unauthorized"}, 401
-    food_name = request.args.get("food", "").strip()
-    if not food_name:
-        return {"found": False, "pral_score": None}
-    score = lookup_pral_score(food_name)
-    if score is not None:
-        return {"found": True, "pral_score": round(float(score), 2), "source": "knowledge_base"}
-
-    estimated, source = estimate_pral_score(food_name)
-    return {"found": False, "pral_score": round(float(estimated), 2), "source": source}
-
-
-@app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
-def admin_toggle_user_role(user_id):
-    guard = require_admin()
-    if guard:
-        return guard
-
-    current_admin_id = session["user_id"]
-    with get_db() as conn:
-        target = conn.execute("SELECT id, name, email, is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not target:
-            flash("User not found.")
-            return redirect(url_for("admin_dashboard"))
-
-        if target["id"] == current_admin_id and target["is_admin"]:
-            flash("You cannot remove your own admin role while logged in.")
-            return redirect(url_for("admin_dashboard"))
-
-        new_role = 0 if target["is_admin"] else 1
-        conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_role, user_id))
-    action = "user_promote" if new_role == 1 else "user_demote"
-    log_admin_action(action, target["email"], f"target_name={target['name']}")
-
-    flash("User role updated.")
-    return redirect(url_for("admin_dashboard"))
-
-
-@app.route("/admin/users/<int:user_id>/toggle-active", methods=["POST"])
-def admin_toggle_user_active(user_id):
-    guard = require_admin()
-    if guard:
-        return guard
-
-    current_admin_id = session["user_id"]
-    with get_db() as conn:
-        target = conn.execute("SELECT id, name, email, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not target:
-            flash("User not found.")
-            return redirect(url_for("admin_dashboard"))
-
-        if target["id"] == current_admin_id and target["is_active"]:
-            flash("You cannot deactivate your own account while logged in.")
-            return redirect(url_for("admin_dashboard"))
-
-        new_status = 0 if target["is_active"] else 1
-        conn.execute("UPDATE users SET is_active = ? WHERE id = ?", (new_status, user_id))
-    action = "user_activate" if new_status == 1 else "user_deactivate"
-    log_admin_action(action, target["email"], f"target_name={target['name']}")
-
-    flash("User status updated.")
-    return redirect(url_for("admin_dashboard"))
+register_admin_routes(
+    app,
+    require_admin=require_admin,
+    load_training_history=load_training_history,
+    load_feature_importance=load_feature_importance,
+    get_db=get_db,
+    log_admin_action=log_admin_action,
+    to_float=to_float,
+    is_logged_in=is_logged_in,
+    lookup_pral_score=lookup_pral_score,
+    estimate_pral_score=estimate_pral_score,
+    get_model_test_results=get_model_test_results,
+)
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -886,14 +792,28 @@ def predict_risk():
         # 5. Ask the model to predict the Flare-Up Score!
         prediction = flare_up_model.predict(input_encoded)[0]
         result = build_prediction_result(prediction)
+        quality_info = assess_prediction_quality(food_name, pral_source, model_columns)
+
+        if quality_info["is_uncertain"]:
+            result["level"] = "uncertain"
+            result["title"] = "Uncertain Result"
+            result["message"] = "This food is not well-represented in known data, so this prediction may be unreliable."
+            result["recommendation"] = "Needs Review"
+            result["recommendation_reason"] = "Not enough trusted food-specific data for a reliable recommendation."
+            result["confidence_label"] = "Low"
+            result["confidence_percent"] = min(int(result.get("confidence_percent", 50)), 55)
+
         result["why_points"] = build_prediction_why_points(
             user_data=user_data,
             condition_value=condition_value,
             food_name=food_name,
             looked_up_pral=meal_pral if pral_source == "knowledge_base" else None
         )
+        result["why_points"].insert(0, quality_info["reason"])
+        result["why_points"] = result["why_points"][:5]
         result["pral_score"] = round(float(meal_pral), 2)
         result["pral_source"] = pral_source
+        result["prediction_quality"] = quality_info["quality"]
         if result["level"] == "high":
             result["alternatives"] = suggest_alternative_meals(
                 condition_value=condition_value,
@@ -926,6 +846,7 @@ def predict_risk():
             "why_points": result["why_points"],
             "pral_score": result["pral_score"],
             "pral_source": result["pral_source"],
+            "prediction_quality": result["prediction_quality"],
             "alternatives": result["alternatives"],
             "confidence_percent": result["confidence_percent"],
             "confidence_label": result["confidence_label"],
@@ -960,9 +881,150 @@ def meal_followup_chat():
 def view_symptoms():
     if not is_logged_in():
         return redirect(url_for("login"))
+
+    severity_map = {"mild": 1.0, "moderate": 2.0, "severe": 3.0}
+
     with get_db() as conn:
-        logs = conn.execute("SELECT * FROM symptoms WHERE user_id = ? ORDER BY timestamp DESC", (session["user_id"],)).fetchall()
-    return render_template("view_symptoms.html", logs=logs)
+        uid = session["user_id"]
+        logs = conn.execute(
+            "SELECT id, symptom, severity, note, timestamp FROM symptoms WHERE user_id = ? ORDER BY timestamp DESC LIMIT 60",
+            (uid,)
+        ).fetchall()
+
+        recent_summary = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN timestamp >= datetime('now', '-7 day') THEN 1 ELSE 0 END) AS recent_count,
+                SUM(CASE WHEN timestamp >= datetime('now', '-14 day') AND timestamp < datetime('now', '-7 day') THEN 1 ELSE 0 END) AS previous_count,
+                SUM(CASE WHEN timestamp >= datetime('now', '-7 day') AND LOWER(severity) = 'severe' THEN 1 ELSE 0 END) AS severe_recent
+            FROM symptoms
+            WHERE user_id = ?
+            """,
+            (uid,)
+        ).fetchone()
+
+        top_symptom = conn.execute(
+            """
+            SELECT symptom, COUNT(*) AS cnt
+            FROM symptoms
+            WHERE user_id = ?
+            GROUP BY LOWER(symptom)
+            ORDER BY cnt DESC, LOWER(symptom) ASC
+            LIMIT 1
+            """,
+            (uid,)
+        ).fetchone()
+
+        daily_rows = conn.execute(
+            """
+            SELECT date(timestamp) AS day, COUNT(*) AS cnt
+            FROM symptoms
+            WHERE user_id = ? AND timestamp >= datetime('now', '-13 day')
+            GROUP BY date(timestamp)
+            ORDER BY day ASC
+            """,
+            (uid,)
+        ).fetchall()
+
+        trigger_rows = conn.execute(
+            """
+            SELECT
+                s.symptom AS symptom,
+                f.food_name AS food_name,
+                COUNT(*) AS hit_count,
+                AVG(CASE LOWER(s.severity)
+                    WHEN 'mild' THEN 1
+                    WHEN 'moderate' THEN 2
+                    WHEN 'severe' THEN 3
+                    ELSE 1
+                END) AS avg_severity
+            FROM symptoms s
+            JOIN food_logs f
+                ON s.user_id = f.user_id
+               AND julianday(s.timestamp) - julianday(f.timestamp) BETWEEN 0 AND 0.25
+            WHERE s.user_id = ?
+            GROUP BY LOWER(s.symptom), LOWER(f.food_name)
+            HAVING hit_count >= 2
+            ORDER BY hit_count DESC, avg_severity DESC, LOWER(f.food_name) ASC
+            LIMIT 6
+            """,
+            (uid,)
+        ).fetchall()
+
+    daily_map = {row["day"]: int(row["cnt"] or 0) for row in daily_rows}
+    day_labels = []
+    day_counts = []
+    for delta in range(13, -1, -1):
+        day = (date.today() - timedelta(days=delta)).isoformat()
+        day_labels.append(day[5:])
+        day_counts.append(daily_map.get(day, 0))
+
+    recent_count = int((recent_summary["recent_count"] or 0) if recent_summary else 0)
+    previous_count = int((recent_summary["previous_count"] or 0) if recent_summary else 0)
+    severe_recent = int((recent_summary["severe_recent"] or 0) if recent_summary else 0)
+
+    recent_logs = [row for row in logs if row["timestamp"] and row["timestamp"] >= (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")]
+    avg_severity_7d = 0.0
+    if recent_logs:
+        avg_severity_7d = round(
+            sum(severity_map.get((row["severity"] or "mild").strip().lower(), 1.0) for row in recent_logs) / len(recent_logs),
+            2
+        )
+
+    trend_delta = recent_count - previous_count
+    if trend_delta >= 3:
+        trend_label = "Worsening"
+    elif trend_delta <= -3:
+        trend_label = "Improving"
+    else:
+        trend_label = "Stable"
+
+    trigger_insights = []
+    for row in trigger_rows:
+        avg_sev = round(float(row["avg_severity"] or 0), 2)
+        confidence = "high" if row["hit_count"] >= 4 else "medium"
+        if avg_sev >= 2.5:
+            confidence = "high"
+        trigger_insights.append({
+            "symptom": row["symptom"],
+            "food_name": row["food_name"],
+            "hit_count": int(row["hit_count"] or 0),
+            "avg_severity": avg_sev,
+            "confidence": confidence,
+        })
+
+    action_items = []
+    if severe_recent >= 2:
+        action_items.append("You logged multiple severe symptoms this week. Consider contacting your clinician if this pattern continues.")
+    if trend_delta >= 3:
+        action_items.append("Symptoms rose versus last week. Review recent meals and prioritize lower-acid, lower-fat options.")
+    if trigger_insights:
+        top_trigger = trigger_insights[0]
+        action_items.append(
+            f"{top_trigger['food_name'].title()} appears linked to {top_trigger['symptom'].lower()} ({top_trigger['hit_count']} close-time occurrences). Trial reducing it for 7 days."
+        )
+    if not action_items:
+        action_items.append("Current symptom pattern is relatively steady. Keep logging daily so trigger detection becomes more accurate.")
+
+    summary = {
+        "recent_count": recent_count,
+        "previous_count": previous_count,
+        "severe_recent": severe_recent,
+        "avg_severity_7d": avg_severity_7d,
+        "trend_delta": trend_delta,
+        "trend_label": trend_label,
+        "top_symptom": top_symptom["symptom"] if top_symptom else None,
+    }
+
+    return render_template(
+        "view_symptoms.html",
+        logs=logs,
+        summary=summary,
+        trend_labels=day_labels,
+        trend_counts=day_counts,
+        trigger_insights=trigger_insights,
+        action_items=action_items,
+    )
 
 @app.route("/add_symptom", methods=["POST"])
 def add_symptom():
@@ -1053,9 +1115,25 @@ def mark_taken(med_id):
 def insights():
     if not is_logged_in(): return redirect(url_for("login"))
     with get_db() as conn:
-        top_symptoms = conn.execute("SELECT symptom, COUNT(*) as count FROM symptoms WHERE user_id = ? GROUP BY symptom ORDER BY count DESC", (session["user_id"],)).fetchall()
-        top_foods = conn.execute("SELECT food_name, COUNT(*) as count FROM food_logs WHERE user_id = ? GROUP BY food_name ORDER BY count DESC", (session["user_id"],)).fetchall()
-    return render_template("insights.html", top_symptoms=top_symptoms, top_foods=top_foods)
+        uid = session["user_id"]
+        frequency = conn.execute(
+            "SELECT symptom, COUNT(*) AS count FROM symptoms WHERE user_id = ? GROUP BY LOWER(symptom) ORDER BY count DESC, LOWER(symptom) ASC LIMIT 10",
+            (uid,)
+        ).fetchall()
+        correlations = conn.execute(
+            """
+            SELECT s.symptom, f.food_name
+            FROM symptoms s
+            JOIN food_logs f
+              ON s.user_id = f.user_id
+             AND julianday(s.timestamp) - julianday(f.timestamp) BETWEEN 0 AND 0.1667
+            WHERE s.user_id = ?
+            ORDER BY s.timestamp DESC
+            LIMIT 8
+            """,
+            (uid,)
+        ).fetchall()
+    return render_template("insights.html", frequency=frequency, correlations=correlations)
 
 if __name__ == "__main__":
     init_db()

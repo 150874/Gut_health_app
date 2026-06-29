@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Model Performance</title>
+    <title>Admin Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -64,48 +64,32 @@
             letter-spacing: 0.04em;
         }
         .metric-value {
-            font-size: 1.4rem;
+            font-size: 1.35rem;
             font-weight: 800;
             color: #1f3f58;
         }
-        .table thead th {
-            color: #4e6677;
-            text-transform: uppercase;
-            font-size: 0.76rem;
-            letter-spacing: 0.04em;
-            border-bottom-width: 1px;
+        .flash-note {
+            border-radius: 12px;
+            border: 1px solid #cae3ef;
+            background: #edf8fd;
+            color: #184765;
         }
-        .table tbody tr {
-            vertical-align: middle;
+        .quick-link {
+            display: block;
+            border: 1px solid #cfe1ec;
+            background: #fff;
+            border-radius: 12px;
+            padding: 0.9rem;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.15s ease, box-shadow 0.2s ease;
         }
-        .user-name {
-            font-weight: 700;
-            color: #17354c;
+        .quick-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(16, 72, 110, 0.12);
         }
-        .user-email {
-            font-size: 0.82rem;
-            color: #5b7385;
-        }
-        .btn-admin {
-            border-radius: 10px;
-            font-weight: 700;
-            font-size: 0.78rem;
-            padding: 0.35rem 0.7rem;
-            width: 108px;
-            text-align: center;
-            white-space: nowrap;
-        }
-        .actions-wrap {
-            display: inline-flex;
-            gap: 0.5rem;
-            justify-content: flex-end;
-            flex-wrap: nowrap;
-        }
-        .filter-input,
-        .filter-select {
-            border-radius: 10px;
-            border: 1px solid #cfe0eb;
-            font-size: 0.88rem;
+        .quick-link .title {
+            font-weight: 800;
         }
         .filter-label {
             font-size: 0.72rem;
@@ -115,19 +99,25 @@
             letter-spacing: 0.05em;
             margin-bottom: 0.25rem;
         }
-        .flash-note {
-            border-radius: 12px;
-            border: 1px solid #cae3ef;
-            background: #edf8fd;
-            color: #184765;
+        .filter-input {
+            border-radius: 10px;
+            border: 1px solid #cfe0eb;
+            font-size: 0.88rem;
         }
-        .soft-success {
-            background: var(--adm-green-soft);
-            border-color: #cce8d7;
+        .user-name {
+            font-weight: 700;
+            color: #17354c;
         }
-        .history-meta {
-            color: #577184;
+        .user-email {
             font-size: 0.82rem;
+            color: #5b7385;
+        }
+        .table thead th {
+            color: #4e6677;
+            text-transform: uppercase;
+            font-size: 0.76rem;
+            letter-spacing: 0.04em;
+            border-bottom-width: 1px;
         }
     </style>
 </head>
@@ -142,7 +132,10 @@
                 <div class="brand-pill mt-1">Admin Console</div>
             </div>
         </a>
-        <div class="d-flex align-items-center">
+        <div class="d-flex align-items-center gap-2">
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary btn-sm rounded-pill">Overview</a>
+            <a href="{{ url_for('admin_model_performance') }}" class="btn btn-outline-primary btn-sm rounded-pill">Model Performance</a>
+            <a href="{{ url_for('admin_user_management') }}" class="btn btn-outline-primary btn-sm rounded-pill">User Management</a>
             <a href="{{ url_for('logout_page') }}" class="btn btn-outline-danger btn-sm rounded-pill">Logout</a>
         </div>
     </div>
@@ -157,221 +150,64 @@
         {% endfor %}
     </div>
     {% endif %}
-
-    <div class="panel p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0">Top Model Features</h5>
-            <span class="badge text-bg-dark">Explainability</span>
-        </div>
-        {% if feature_importance.top_features %}
-        <p class="small text-muted mb-3">From run: {{ feature_importance.trained_at or 'N/A' }}</p>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Feature</th>
-                        <th class="text-end">Importance</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in feature_importance.top_features %}
-                    <tr>
-                        <td class="user-name">{{ item.feature }}</td>
-                        <td class="text-end">{{ item.importance }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-muted mb-0">No feature importance file yet. Run train_model.py to generate model_feature_importance.json.</p>
-        {% endif %}
-    </div>
     {% endwith %}
 
     {% set total_users = admin_users|length %}
     {% set admin_count = admin_users|selectattr('is_admin')|list|length %}
     {% set active_count = admin_users|selectattr('is_active')|list|length %}
 
-    <div class="panel p-4 mb-4 soft-success">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div class="panel p-4" style="background-color: var(--adm-green-soft); border-color: #cce8d7;">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1">Model Performance</h1>
-                <p class="text-muted mb-0">Monitor model quality and manage users from one place.</p>
+                <h1 class="h3 fw-bold mb-1">Admin Overview</h1>
+                <p class="text-muted mb-0">Core admin controls are now split into dedicated pages.</p>
             </div>
-            <span class="badge text-bg-success px-3 py-2">Live Admin View</span>
+            <span class="badge text-bg-success px-3 py-2">Clean Dashboard</span>
         </div>
-        <div class="row g-3 mt-2">
-            <div class="col-md-4">
+        <div class="row g-3">
+            <div class="col-md-3">
                 <div class="metric-tile">
                     <div class="metric-label">Total Users</div>
                     <div class="metric-value">{{ total_users }}</div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="metric-tile">
                     <div class="metric-label">Admins</div>
                     <div class="metric-value">{{ admin_count }}</div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="metric-tile">
                     <div class="metric-label">Active Accounts</div>
                     <div class="metric-value">{{ active_count }}</div>
                 </div>
             </div>
+            <div class="col-md-3">
+                <div class="metric-tile">
+                    <div class="metric-label">Latest F1</div>
+                    <div class="metric-value">{{ model_test_results.f1 if model_test_results and model_test_results.f1 is not none else 'N/A' }}</div>
+                </div>
+            </div>
         </div>
     </div>
 
-    {% if model_test_results %}
-    <div class="panel p-4" style="background-color: #eef9f1; border-color: #ccead3;">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="fw-bold mb-0">Latest Test Results</h5>
-            <span class="badge text-bg-success">Training Output</span>
-        </div>
-        <p class="small text-muted mb-3">Loaded from model_test_results.json.</p>
-        <div class="history-meta mb-3">
-            <strong>Trained:</strong> {{ model_test_results.trained_at or 'N/A' }}
-            <span class="mx-2">|</span>
-            <strong>Samples:</strong> {{ model_test_results.sample_count or 'N/A' }}
-            <span class="mx-2">|</span>
-            <strong>Features:</strong> {{ model_test_results.feature_count or 'N/A' }}
-        </div>
-        <div class="row g-3 mb-2">
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">MAE</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.mae }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">Recall (Flare)</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.recall }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">Flare Threshold</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.flare_threshold }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">RMSE</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.rmse if model_test_results.rmse is not none else 'N/A' }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">Precision (Flare)</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.precision if model_test_results.precision is not none else 'N/A' }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">F1 (Flare)</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.f1 if model_test_results.f1 is not none else 'N/A' }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">Balanced Accuracy</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.balanced_accuracy if model_test_results.balanced_accuracy is not none else 'N/A' }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">ROC-AUC</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.roc_auc if model_test_results.roc_auc is not none else 'N/A' }}</div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 bg-white rounded-3 border h-100">
-                    <div class="small text-muted">R2</div>
-                    <div class="h5 fw-bold mb-0">{{ model_test_results.r2 if model_test_results.r2 is not none else 'N/A' }}</div>
-                </div>
-            </div>
-        </div>
-        {% if model_test_results.cross_validation %}
-        <div class="p-3 bg-white rounded-3 border mb-3">
-            <div class="small text-muted mb-2">Cross-Validation Summary ({{ model_test_results.cross_validation.folds }} folds)</div>
-            <div class="row g-2">
-                <div class="col-md-3"><strong>MAE:</strong> {{ model_test_results.cross_validation.mae_mean }}</div>
-                <div class="col-md-3"><strong>RMSE:</strong> {{ model_test_results.cross_validation.rmse_mean }}</div>
-                <div class="col-md-3"><strong>R2:</strong> {{ model_test_results.cross_validation.r2_mean }}</div>
-                <div class="col-md-3"><strong>F1:</strong> {{ model_test_results.cross_validation.f1_mean }}</div>
-            </div>
-        </div>
-        {% endif %}
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th>Pred: No Flare</th>
-                        <th>Pred: Flare</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <th>True: No Flare</th>
-                        <td>{{ model_test_results.confusion_matrix.tn }}</td>
-                        <td>{{ model_test_results.confusion_matrix.fp }}</td>
-                    </tr>
-                    <tr>
-                        <th>True: Flare</th>
-                        <td>{{ model_test_results.confusion_matrix.fn }}</td>
-                        <td>{{ model_test_results.confusion_matrix.tp }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% else %}
     <div class="panel p-4">
-        <h5 class="fw-bold mb-2">No model metrics available</h5>
-        <p class="text-muted mb-0">Run your training script to generate model_test_results.json, then refresh this page.</p>
-    </div>
-    {% endif %}
-
-    <div class="panel p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0">Training History</h5>
-            <span class="badge text-bg-info">Recent Runs</span>
+        <h5 class="fw-bold mb-3">Quick Access</h5>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <a href="{{ url_for('admin_model_performance') }}" class="quick-link">
+                    <div class="title"><i class="bi bi-graph-up-arrow me-2"></i>Model Performance</div>
+                    <div class="small text-muted mt-1">Charts, metrics, feature importance, and training history.</div>
+                </a>
+            </div>
+            <div class="col-md-6">
+                <a href="{{ url_for('admin_user_management') }}" class="quick-link">
+                    <div class="title"><i class="bi bi-people me-2"></i>User Management</div>
+                    <div class="small text-muted mt-1">Promote, demote, activate/deactivate, and filter users.</div>
+                </a>
+            </div>
         </div>
-        {% if training_history %}
-        <div class="table-responsive mb-2">
-            <table class="table table-sm align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Trained At</th>
-                        <th>MAE</th>
-                        <th>RMSE</th>
-                        <th>Recall</th>
-                        <th>Precision</th>
-                        <th>F1</th>
-                        <th>ROC-AUC</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for run in training_history %}
-                    <tr>
-                        <td>{{ run.trained_at or 'N/A' }}</td>
-                        <td>{{ run.mae if run.mae is not none else 'N/A' }}</td>
-                        <td>{{ run.rmse if run.rmse is not none else 'N/A' }}</td>
-                        <td>{{ run.recall if run.recall is not none else 'N/A' }}</td>
-                        <td>{{ run.precision if run.precision is not none else 'N/A' }}</td>
-                        <td>{{ run.f1 if run.f1 is not none else 'N/A' }}</td>
-                        <td>{{ run.roc_auc if run.roc_auc is not none else 'N/A' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-muted mb-0">No training history yet. Run train_model.py to generate history data.</p>
-        {% endif %}
     </div>
 
     <div class="panel p-4">
@@ -379,7 +215,7 @@
             <h5 class="fw-bold mb-0">Food PRAL Knowledge Base</h5>
             <span class="badge text-bg-primary">Prediction Input</span>
         </div>
-        <p class="small text-muted mb-3">Add or update PRAL scores used to auto-fill meal acidity in Diet Checker.</p>
+        <p class="small text-muted mb-3">Add or update PRAL scores used to auto-calculate meal acidity in Diet Checker.</p>
         <form action="{{ url_for('admin_add_pral') }}" method="POST" class="row g-2 align-items-end mb-3">
             <div class="col-md-6">
                 <label class="filter-label" for="pralFoodName">Food Name</label>
@@ -430,109 +266,7 @@
 
     <div class="panel p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0">User Management</h5>
-            <span class="badge text-bg-secondary">Admin Controls</span>
-        </div>
-        <p class="small text-muted mb-3">Promote or demote admins and activate or deactivate user accounts.</p>
-        <div class="row g-2 align-items-end mb-3">
-            <div class="col-md-5">
-                <label class="filter-label" for="userSearch">Search Name or Email</label>
-                <input id="userSearch" type="text" class="form-control filter-input" placeholder="Type to search users...">
-            </div>
-            <div class="col-md-3">
-                <label class="filter-label" for="roleFilter">Role</label>
-                <select id="roleFilter" class="form-select filter-select">
-                    <option value="all">All Roles</option>
-                    <option value="admin">Admin</option>
-                    <option value="user">User</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="filter-label" for="statusFilter">Status</label>
-                <select id="statusFilter" class="form-select filter-select">
-                    <option value="all">All Statuses</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-            </div>
-            <div class="col-md-1 d-grid">
-                <button id="clearFilters" type="button" class="btn btn-outline-secondary btn-sm" title="Clear filters">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-        </div>
-        <div class="small text-muted mb-2" id="userCountText"></div>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0" id="usersTable">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Condition</th>
-                        <th>Role</th>
-                        <th>Status</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for user in admin_users %}
-                    <tr class="user-row" data-role="{{ 'admin' if user.is_admin else 'user' }}" data-status="{{ 'active' if user.is_active else 'inactive' }}" data-search="{{ (user.name ~ ' ' ~ user.email)|lower }}">
-                        <td>
-                            <div class="user-name">{{ user.name }}</div>
-                            <div class="user-email">ID: {{ user.id }}</div>
-                        </td>
-                        <td class="user-email">{{ user.email }}</td>
-                        <td>{{ user.condition|capitalize }}</td>
-                        <td>
-                            {% if user.is_admin %}
-                            <span class="badge text-bg-primary">Admin</span>
-                            {% else %}
-                            <span class="badge text-bg-light border">User</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if user.is_active %}
-                            <span class="badge text-bg-success">Active</span>
-                            {% else %}
-                            <span class="badge text-bg-danger">Inactive</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end">
-                            <div class="actions-wrap">
-                                <form action="{{ url_for('admin_toggle_user_role', user_id=user.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to update this user role?');">
-                                    {% if user.is_admin %}
-                                    <button type="submit" class="btn btn-outline-warning btn-sm btn-admin">Demote</button>
-                                    {% else %}
-                                    <button type="submit" class="btn btn-outline-primary btn-sm btn-admin">Promote</button>
-                                    {% endif %}
-                                </form>
-                                <form action="{{ url_for('admin_toggle_user_active', user_id=user.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to change this account status?');">
-                                    {% if user.is_active %}
-                                    <button type="submit" class="btn btn-outline-danger btn-sm btn-admin">Deactivate</button>
-                                    {% else %}
-                                    <button type="submit" class="btn btn-outline-success btn-sm btn-admin">Activate</button>
-                                    {% endif %}
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% if not admin_users %}
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-4">No users found.</td>
-                    </tr>
-                    {% endif %}
-                    <tr id="noUsersFiltered" style="display: none;">
-                        <td colspan="6" class="text-center text-muted py-4">No users match the selected filters.</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="panel p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0">Admin Audit Log</h5>
+            <h5 class="fw-bold mb-0">Recent Admin Activity</h5>
             <span class="badge text-bg-warning text-dark">Security</span>
         </div>
         {% if audit_logs %}
@@ -565,61 +299,6 @@
         {% endif %}
     </div>
 </div>
-
-<script>
-    (function () {
-        const searchInput = document.getElementById('userSearch');
-        const roleFilter = document.getElementById('roleFilter');
-        const statusFilter = document.getElementById('statusFilter');
-        const clearBtn = document.getElementById('clearFilters');
-        const rows = Array.from(document.querySelectorAll('.user-row'));
-        const noResultsRow = document.getElementById('noUsersFiltered');
-        const countText = document.getElementById('userCountText');
-
-        function applyFilters() {
-            const term = (searchInput.value || '').trim().toLowerCase();
-            const role = roleFilter.value;
-            const status = statusFilter.value;
-            let visibleCount = 0;
-
-            rows.forEach((row) => {
-                const rowSearch = row.dataset.search || '';
-                const rowRole = row.dataset.role || 'user';
-                const rowStatus = row.dataset.status || 'active';
-
-                const matchesTerm = !term || rowSearch.includes(term);
-                const matchesRole = role === 'all' || rowRole === role;
-                const matchesStatus = status === 'all' || rowStatus === status;
-                const isVisible = matchesTerm && matchesRole && matchesStatus;
-
-                row.style.display = isVisible ? '' : 'none';
-                if (isVisible) {
-                    visibleCount += 1;
-                }
-            });
-
-            if (rows.length > 0) {
-                countText.textContent = `${visibleCount} of ${rows.length} users shown`;
-            }
-            if (noResultsRow) {
-                noResultsRow.style.display = (rows.length > 0 && visibleCount === 0) ? '' : 'none';
-            }
-        }
-
-        if (searchInput && roleFilter && statusFilter && clearBtn) {
-            searchInput.addEventListener('input', applyFilters);
-            roleFilter.addEventListener('change', applyFilters);
-            statusFilter.addEventListener('change', applyFilters);
-            clearBtn.addEventListener('click', () => {
-                searchInput.value = '';
-                roleFilter.value = 'all';
-                statusFilter.value = 'all';
-                applyFilters();
-            });
-            applyFilters();
-        }
-    })();
-</script>
 
 </body>
 </html>
