@@ -149,6 +149,154 @@ def normalize_food_name(value):
     return text if text else "unknown food"
 
 
+def estimate_pral_score(food_name, meal_type="Lunch"):
+    normalized_food = normalize_food_name(food_name)
+    known_score = lookup_pral_score(normalized_food)
+    if known_score is not None:
+        return float(known_score), "knowledge_base"
+
+    keyword_scores = {
+        "fried": 6.0,
+        "pizza": 5.0,
+        "burger": 6.3,
+        "sausage": 6.2,
+        "bacon": 6.0,
+        "beef": 5.2,
+        "chicken": 2.8,
+        "cheese": 4.5,
+        "tomato": 3.8,
+        "citrus": 3.4,
+        "pepper": 3.0,
+        "spicy": 4.2,
+        "rice": 1.0,
+        "oat": -0.8,
+        "banana": -5.5,
+        "salad": -2.8,
+        "lentil": -3.0,
+        "bean": -2.4,
+        "vegetable": -2.6,
+        "tofu": -2.2,
+        "fruit": -1.8,
+    }
+
+    matched_scores = [value for keyword, value in keyword_scores.items() if keyword in normalized_food]
+    if matched_scores:
+        return round(float(sum(matched_scores) / len(matched_scores)), 2), "estimated_from_food"
+
+    meal_type_defaults = {
+        "breakfast": 0.7,
+        "lunch": 1.4,
+        "dinner": 2.0,
+    }
+    fallback = meal_type_defaults.get(str(meal_type).strip().lower(), 1.2)
+    return float(fallback), "estimated_default"
+
+
+def suggest_alternative_meals(condition_value, meal_type="Lunch", exclude_food="", limit=3):
+    column = CONDITION_COLUMN_MAP.get(condition_value, "gastritis_status")
+    normalized_exclude = normalize_food_name(exclude_food)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT fr.food_name, COALESCE(fp.pral_score, 0) AS pral_score "
+            f"FROM food_rules fr "
+            f"LEFT JOIN food_pral fp ON LOWER(fp.food_name) = LOWER(fr.food_name) "
+            f"WHERE LOWER(fr.{column}) = 'safe' AND LOWER(fr.food_name) != ? "
+            f"ORDER BY ABS(COALESCE(fp.pral_score, 0)) ASC, LOWER(fr.food_name) ASC LIMIT ?",
+            (normalized_exclude, limit)
+        ).fetchall()
+
+    alternatives = []
+    for row in rows:
+        reason = "Generally gentle for this condition"
+        if row["pral_score"] <= -1:
+            reason = "Lower acid load option"
+        elif row["pral_score"] <= 1.5:
+            reason = "Mild acid load option"
+        alternatives.append({
+            "food": row["food_name"],
+            "reason": reason,
+            "pral_score": round(float(row["pral_score"]), 2),
+            "meal_type": meal_type,
+        })
+    return alternatives
+
+
+def build_followup_answer(question, context):
+    q = (question or "").strip().lower()
+    if not q:
+        return "Ask me anything about this meal, like why the risk is high, better options, or how to lower risk next time."
+
+    why_points = context.get("why_points") or []
+    alternatives = context.get("alternatives") or []
+    risk_level = context.get("risk_level", "moderate")
+    food_name = context.get("food_name", "this meal")
+
+    if "why" in q or "reason" in q:
+        if why_points:
+            return "Main reasons: " + "; ".join(why_points[:3])
+        return "The risk is based on your meal acid load, hydration, stress level, and condition profile."
+
+    if "alternative" in q or "instead" in q or "replace" in q:
+        if alternatives:
+            picks = ", ".join(item["food"] for item in alternatives[:3])
+            return f"Better options for your condition: {picks}."
+        return "Try a lower-acid, less spicy, and better-hydrated meal option for your condition."
+
+    if "lower" in q and "risk" in q:
+        return "To lower risk: improve hydration (>= 300 ml), reduce acidic or spicy items, and keep stress low during meals."
+
+    if "safe" in q:
+        if risk_level == "low":
+            return f"{food_name.capitalize()} appears relatively safe for now, but continue monitoring symptoms."
+        return f"{food_name.capitalize()} is not the safest pick right now based on your current inputs."
+
+    return "Based on this meal, focus on lower acid load, better hydration, and calmer eating conditions. Ask for alternatives for specific swaps."
+
+
+def build_prediction_why_points(user_data, condition_value, food_name, looked_up_pral=None):
+    points = []
+    meal_pral = to_float(user_data.get("Meal_PRAL_Score"), 0)
+    water_ml = int(to_float(user_data.get("Water_Consumed_ml"), 0))
+    stress_level = str(user_data.get("Stress_At_Meal", "Moderate")).strip().lower()
+
+    if meal_pral >= 5:
+        points.append("High acid load from this meal (high PRAL score).")
+    elif meal_pral >= 2:
+        points.append("Moderate acid load that may trigger symptoms in sensitive users.")
+    elif meal_pral <= -1.5:
+        points.append("Lower acid load from this meal profile.")
+
+    acidic_keywords = ["tomato", "citrus", "orange", "lemon", "spicy", "pepper", "fried", "pizza"]
+    if any(word in food_name for word in acidic_keywords):
+        points.append("This food may be acidic or irritating for your condition.")
+
+    if looked_up_pral is not None:
+        points.append("PRAL value was matched from the food knowledge base.")
+
+    if water_ml < 200:
+        points.append("Low water intake at this meal may increase irritation risk.")
+    elif water_ml >= 450:
+        points.append("Good hydration may help reduce discomfort risk.")
+
+    if stress_level == "high":
+        points.append("High stress level can increase gut sensitivity and flare-up risk.")
+    elif stress_level == "moderate":
+        points.append("Moderate stress can still influence digestive symptoms.")
+
+    if condition_value == "gastritis":
+        points.append("For gastritis, irritating meals may inflame the stomach lining.")
+    elif condition_value == "gerd":
+        points.append("For GERD, trigger meals can increase reflux and heartburn symptoms.")
+    elif condition_value == "hpylori":
+        points.append("For H. pylori, irritating meals may worsen upper abdominal discomfort.")
+
+    if not points:
+        points.append("No strong risk triggers were detected from the current meal inputs.")
+
+    return points[:5]
+
+
 def build_prediction_result(score):
     raw_score = float(score)
     score = round(raw_score, 1)
@@ -182,20 +330,31 @@ def build_prediction_result(score):
         level = "high"
         title = "DANGER!"
         message = "High probability of a flare-up. Consider drinking more water or changing the meal."
+        recommendation = "Avoid This Meal"
+        recommendation_reason = "Your predicted flare-up risk is high for your current condition profile."
     elif score >= 4:
         level = "moderate"
         title = "Warning."
         message = "Moderate risk. Proceed with caution."
+        recommendation = "Use Caution"
+        recommendation_reason = "Your risk is moderate. Portion size, hydration, and stress can change the outcome."
     else:
         level = "low"
         title = "All Clear!"
         message = "This meal profile looks safe for your gut health."
+        recommendation = "Safe To Try"
+        recommendation_reason = "Your predicted flare-up risk is low for this meal profile."
+
+    if confidence_label == "Low":
+        recommendation_reason += " Confidence is low, so monitor symptoms after eating."
 
     return {
         "score": score,
         "level": level,
         "title": title,
         "message": message,
+        "recommendation": recommendation,
+        "recommendation_reason": recommendation_reason,
         "confidence_percent": confidence_percent,
         "confidence_label": confidence_label,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -430,9 +589,11 @@ def pral_lookup_api():
     if not food_name:
         return {"found": False, "pral_score": None}
     score = lookup_pral_score(food_name)
-    if score is None:
-        return {"found": False, "pral_score": None}
-    return {"found": True, "pral_score": round(float(score), 2)}
+    if score is not None:
+        return {"found": True, "pral_score": round(float(score), 2), "source": "knowledge_base"}
+
+    estimated, source = estimate_pral_score(food_name)
+    return {"found": False, "pral_score": round(float(estimated), 2), "source": source}
 
 
 @app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
@@ -611,6 +772,11 @@ def diet_checker():
     # Get parameters passed from the /check redirect
     food = request.args.get("food")
     status = request.args.get("status")
+
+    # If there is no active food context, clear stale prediction cards.
+    if not food:
+        session.pop("last_prediction", None)
+        session.pop("last_prediction_context", None)
     
     with get_db() as conn:
         recent_logs = conn.execute("SELECT id, food_name, timestamp FROM food_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (session["user_id"],)).fetchall()
@@ -687,18 +853,16 @@ def predict_risk():
         hpylori_value = (profile_row["h_pylori_result"] or "Not Applicable")
         if condition_value != "hpylori":
             hpylori_value = "Not Applicable"
-        meal_pral = payload.get("Meal_PRAL_Score")
+        meal_type = payload.get("Meal_Type", "Lunch")
         food_name = normalize_food_name(payload.get("Food_Name"))
-        if meal_pral in (None, ""):
-            looked_up_pral = lookup_pral_score(food_name)
-            meal_pral = looked_up_pral if looked_up_pral is not None else 0
+        meal_pral, pral_source = estimate_pral_score(food_name, meal_type=meal_type)
         user_data = {
             "Age": to_float(profile_row["age"], 30),
             "BMI": to_float(profile_row["bmi"], 24.5),
             "Primary_Condition": MODEL_CONDITION_MAP.get(condition_value, "General"),
             "H_Pylori_Result": hpylori_value,
             "Food_Name": food_name,
-            "Meal_Type": payload.get("Meal_Type", "Lunch"),
+            "Meal_Type": meal_type,
             "Meal_PRAL_Score": to_float(meal_pral, 0),
             "Water_Consumed_ml": int(to_float(payload.get("Water_Consumed_ml"), 200)),
             "Stress_At_Meal": payload.get("Stress_At_Meal", "Moderate")
@@ -722,9 +886,34 @@ def predict_risk():
         # 5. Ask the model to predict the Flare-Up Score!
         prediction = flare_up_model.predict(input_encoded)[0]
         result = build_prediction_result(prediction)
+        result["why_points"] = build_prediction_why_points(
+            user_data=user_data,
+            condition_value=condition_value,
+            food_name=food_name,
+            looked_up_pral=meal_pral if pral_source == "knowledge_base" else None
+        )
+        result["pral_score"] = round(float(meal_pral), 2)
+        result["pral_source"] = pral_source
+        if result["level"] == "high":
+            result["alternatives"] = suggest_alternative_meals(
+                condition_value=condition_value,
+                meal_type=meal_type,
+                exclude_food=food_name,
+                limit=3,
+            )
+        else:
+            result["alternatives"] = []
 
         # Keep the latest prediction available to the template.
         session["last_prediction"] = result
+        session["last_prediction_context"] = {
+            "food_name": food_name,
+            "risk_level": result["level"],
+            "why_points": result.get("why_points", []),
+            "alternatives": result.get("alternatives", []),
+            "recommendation": result.get("recommendation", "Use Caution"),
+            "condition": condition_value,
+        }
 
         # 6. Return the score and interpretation back to the website
         return {
@@ -732,6 +921,12 @@ def predict_risk():
             "risk_level": result["level"],
             "title": result["title"],
             "message": result["message"],
+            "recommendation": result["recommendation"],
+            "recommendation_reason": result["recommendation_reason"],
+            "why_points": result["why_points"],
+            "pral_score": result["pral_score"],
+            "pral_source": result["pral_source"],
+            "alternatives": result["alternatives"],
             "confidence_percent": result["confidence_percent"],
             "confidence_label": result["confidence_label"],
             "generated_at": result["generated_at"]
@@ -739,6 +934,24 @@ def predict_risk():
 
     except Exception as e:
         return {"error": str(e)}, 400
+
+
+@app.route('/meal_followup_chat', methods=['POST'])
+def meal_followup_chat():
+    if not is_logged_in():
+        return {"error": "Unauthorized"}, 401
+
+    context = session.get("last_prediction_context")
+    if not context:
+        return {"error": "No meal has been analyzed yet. Predict a meal first."}, 400
+
+    payload = request.json or {}
+    question = (payload.get("question") or "").strip()
+    answer = build_followup_answer(question, context)
+    return {
+        "answer": answer,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+    }
 
 # ---------------------------------------------------
 # ROUTES: SYMPTOMS & MEDS

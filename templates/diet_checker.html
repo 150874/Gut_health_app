@@ -171,6 +171,144 @@
             color: #0b6b43;
             border-color: #9fd8be;
         }
+        .final-reco {
+            margin-top: 0.8rem;
+            border-radius: 12px;
+            border: 1px solid #d9e8ef;
+            background: rgba(255, 255, 255, 0.72);
+            padding: 0.75rem 0.8rem;
+        }
+        .final-reco .label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            font-weight: 800;
+            opacity: 0.8;
+        }
+        .final-reco .value {
+            font-size: 1rem;
+            font-weight: 800;
+            margin-top: 0.15rem;
+        }
+        .final-reco .reason {
+            margin-top: 0.25rem;
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+        .why-box {
+            margin-top: 0.7rem;
+            border-radius: 12px;
+            border: 1px dashed #bad7e6;
+            background: rgba(255, 255, 255, 0.76);
+            padding: 0.65rem 0.8rem;
+        }
+        .why-box .why-title {
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-bottom: 0.35rem;
+            opacity: 0.9;
+        }
+        .why-box ul {
+            margin-bottom: 0;
+            padding-left: 1.05rem;
+            font-size: 0.86rem;
+        }
+        .viz-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.55rem;
+            margin-top: 0.7rem;
+        }
+        .viz-card {
+            border: 1px solid #cfe4ef;
+            border-radius: 11px;
+            background: rgba(255, 255, 255, 0.86);
+            padding: 0.55rem 0.65rem;
+        }
+        .viz-card .label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            opacity: 0.78;
+        }
+        .viz-card .value {
+            font-size: 1rem;
+            font-weight: 800;
+            margin-top: 0.15rem;
+        }
+        .gh-progress {
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            background: #dceff7;
+            overflow: hidden;
+            margin-top: 0.25rem;
+        }
+        .gh-progress-fill {
+            height: 100%;
+            border-radius: 999px;
+        }
+        .gh-progress-risk { background: linear-gradient(90deg, #20b06f 0%, #f1b33f 55%, #df4b61 100%); }
+        .gh-progress-confidence { background: linear-gradient(90deg, #6fa8dc 0%, #195d8f 100%); }
+        .alt-box {
+            margin-top: 0.75rem;
+            border: 1px solid #cde4cf;
+            border-radius: 12px;
+            background: #f2fbf4;
+            padding: 0.65rem 0.75rem;
+        }
+        .alt-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            color: #1e6e46;
+            margin-bottom: 0.35rem;
+        }
+        .alt-item {
+            padding: 0.42rem 0;
+            border-top: 1px dashed #b8d9c4;
+        }
+        .alt-item:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+        .chat-box {
+            margin-top: 0.85rem;
+            border: 1px solid #d8e7f0;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 0.75rem;
+        }
+        .chat-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.4rem;
+        }
+        .chat-log {
+            max-height: 170px;
+            overflow-y: auto;
+            border: 1px solid #d8e8f0;
+            border-radius: 10px;
+            background: #fcfeff;
+            padding: 0.55rem;
+            margin-bottom: 0.5rem;
+        }
+        .chat-msg {
+            font-size: 0.84rem;
+            margin-bottom: 0.45rem;
+        }
+        .chat-msg:last-child {
+            margin-bottom: 0;
+        }
+        .chat-msg strong {
+            color: #164f73;
+        }
         .fade-in-up {
             animation: fadeInUp 0.45s ease both;
         }
@@ -182,6 +320,7 @@
             .header-nav { padding: 12px 0; }
             .card { border-radius: 16px; padding: 20px 16px; }
             .container-box { margin-top: 10px; }
+            .viz-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -212,6 +351,7 @@
         <p class="text-muted small mb-3">
             Profile used by AI: Age <strong>{{ user_profile.age }}</strong>, BMI <strong>{{ user_profile.bmi }}</strong>, H. pylori <strong>{{ user_profile.h_pylori_result }}</strong>
         </p>
+        <div class="small text-muted mb-3">Quick flow: Enter food -> Predict Risk -> Follow Final Recommendation.</div>
         
         <form action="/check" method="POST" id="dietForm" class="mb-2">
             <div class="mb-3">
@@ -246,17 +386,17 @@
 
             <div class="mb-3">
                 <label class="form-label" for="pralScoreInput">
-                    <i class="bi bi-activity me-1"></i> Meal PRAL Score (estimated)
+                    <i class="bi bi-activity me-1"></i> Meal PRAL Score (auto-calculated)
                 </label>
-                <input type="number" step="0.1" class="form-control" id="pralScoreInput" placeholder="e.g. 3.5">
-                <div class="small text-muted mt-1" id="pralHint">Use positive values for more acidic load and negative for alkalizing meals.</div>
+                <input type="number" step="0.1" class="form-control" id="pralScoreInput" placeholder="Auto" readonly>
+                <div class="small text-muted mt-1" id="pralHint">PRAL is now computed automatically from your food and knowledge base.</div>
             </div>
 
             <button type="button" id="aiPredictBtn" class="btn btn-ai w-100 mb-3">
                 <i class="bi bi-magic"></i> Predict Flare-Up Risk
             </button>
 
-            <div id="aiResultBox" class="ai-box mb-3" {% if prediction_result %}style="display:block;"{% endif %}>
+            <div id="aiResultBox" class="ai-box mb-3" data-initial-risk="{{ prediction_result.score if prediction_result else '' }}" data-initial-confidence="{{ prediction_result.confidence_percent if prediction_result else '' }}" {% if prediction_result %}style="display:block;"{% endif %}>
                 {% if prediction_result %}
                     {% set initial_level = prediction_result.level if prediction_result.level is defined and prediction_result.level else ('high' if prediction_result.score >= 7 else ('moderate' if prediction_result.score >= 4 else 'low')) %}
                     <i class="bi bi-stars"></i>
@@ -268,8 +408,67 @@
                     Risk Score: {{ prediction_result.score }}/10<br>
                     Confidence: {{ prediction_result.confidence_label or 'N/A' }} ({{ prediction_result.confidence_percent or 'N/A' }}%)<br>
                     {{ prediction_result.message }}
+                    <div class="final-reco">
+                        <div class="label">Final Recommendation</div>
+                        <div class="value">{{ prediction_result.recommendation or 'Use Caution' }}</div>
+                        <div class="reason">{{ prediction_result.recommendation_reason or 'Review meal details and monitor symptoms after eating.' }}</div>
+                    </div>
+                    <div class="viz-grid">
+                        <div class="viz-card">
+                            <div class="label">Risk Gauge</div>
+                            <div class="value">{{ prediction_result.score }}/10</div>
+                            <div class="gh-progress"><div class="gh-progress-fill gh-progress-risk" style="width: 0%;"></div></div>
+                        </div>
+                        <div class="viz-card">
+                            <div class="label">Confidence</div>
+                            <div class="value">{{ prediction_result.confidence_percent or 0 }}%</div>
+                            <div class="gh-progress"><div class="gh-progress-fill gh-progress-confidence" style="width: 0%;"></div></div>
+                        </div>
+                        <div class="viz-card">
+                            <div class="label">Auto PRAL</div>
+                            <div class="value">{{ prediction_result.pral_score if prediction_result.pral_score is defined else 'N/A' }}</div>
+                            <div class="small text-muted">Source: {{ prediction_result.pral_source or 'unknown' }}</div>
+                        </div>
+                        <div class="viz-card">
+                            <div class="label">Condition Status</div>
+                            <div class="value">{{ prediction_result.recommendation or 'Use Caution' }}</div>
+                            <div class="small text-muted">Based on meal profile and condition context.</div>
+                        </div>
+                    </div>
+                    {% if prediction_result.why_points %}
+                    <div class="why-box">
+                        <div class="why-title">Why?</div>
+                        <ul>
+                            {% for point in prediction_result.why_points %}
+                            <li>{{ point }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if prediction_result.alternatives %}
+                    <div class="alt-box">
+                        <div class="alt-title">Healthier Alternatives</div>
+                        {% for item in prediction_result.alternatives %}
+                        <div class="alt-item">
+                            <strong>{{ item.food }}</strong>
+                            <div class="small">{{ item.reason }}{% if item.pral_score is not none %} (PRAL: {{ item.pral_score }}){% endif %}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                     <div class="small mt-2 opacity-75">Generated at: {{ prediction_result.generated_at }}</div>
                 {% endif %}
+            </div>
+
+            <div id="mealChatBox" class="chat-box" {% if prediction_result %}style="display:block;"{% else %}style="display:none;"{% endif %}>
+                <div class="chat-title"><i class="bi bi-chat-dots me-1"></i>AI Meal Follow-up</div>
+                <div id="mealChatLog" class="chat-log">
+                    <div class="chat-msg"><strong>Coach:</strong> Ask about this meal, for example: "Why is risk high?" or "Give me safer alternatives".</div>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="mealChatInput" class="form-control" placeholder="Ask about this specific meal...">
+                    <button type="button" id="mealChatSend" class="btn btn-ai">Ask</button>
+                </div>
             </div>
 
             <button type="submit" class="btn btn-primary-gh w-100 py-2">
@@ -329,7 +528,7 @@
         try {
             const response = await fetch(`/api/pral-lookup?food=${encodeURIComponent(foodName)}`);
             const data = await response.json();
-            if (data.found) {
+            if (typeof data.pral_score === 'number') {
                 return data.pral_score;
             }
             return null;
@@ -344,14 +543,44 @@
 
     foodInput.addEventListener('blur', async function() {
         const foodName = foodInput.value.trim();
+        if (!foodName) {
+            pralInput.value = '';
+            pralHint.textContent = 'PRAL is now computed automatically from your food and knowledge base.';
+            return;
+        }
         const lookedUp = await lookupPral(foodName);
-        if (lookedUp !== null) {
+        if (lookedUp !== null && typeof lookedUp === 'number') {
             pralInput.value = lookedUp;
-            pralHint.textContent = `Auto-filled from PRAL knowledge base: ${lookedUp}`;
-        } else {
-            pralHint.textContent = 'No PRAL value found for this food. Enter a manual estimate.';
+            pralHint.textContent = `Auto-calculated PRAL: ${lookedUp}`;
         }
     });
+
+    foodInput.addEventListener('input', function() {
+        if (foodInput.value.trim() !== '') {
+            return;
+        }
+        const aiBox = document.getElementById('aiResultBox');
+        aiBox.style.display = 'none';
+        aiBox.innerHTML = '';
+
+        const mealChatBox = document.getElementById('mealChatBox');
+        const mealChatLog = document.getElementById('mealChatLog');
+        mealChatBox.style.display = 'none';
+        mealChatLog.innerHTML = '<div class="chat-msg"><strong>Coach:</strong> Ask about this meal, for example: "Why is risk high?" or "Give me safer alternatives".</div>';
+
+        pralInput.value = '';
+        pralHint.textContent = 'PRAL is now computed automatically from your food and knowledge base.';
+    });
+
+    (function applyInitialDashboardBars() {
+        const initialRisk = Number(document.getElementById('aiResultBox').dataset.initialRisk || 0);
+        const initialConfidence = Number(document.getElementById('aiResultBox').dataset.initialConfidence || 0);
+        const bars = document.querySelectorAll('.viz-grid .gh-progress-fill');
+        if (bars.length >= 2) {
+            bars[0].style.width = `${Math.max(0, Math.min(100, Math.round(initialRisk * 10)))}%`;
+            bars[1].style.width = `${Math.max(0, Math.min(100, Math.round(initialConfidence)))}%`;
+        }
+    })();
 
     document.getElementById('aiPredictBtn').addEventListener('click', async function() {
         const aiBox = document.getElementById('aiResultBox');
@@ -364,6 +593,100 @@
                 : (normalized === 'moderate' ? 'bi-exclamation-diamond' : 'bi-check-circle');
             return `<span class="risk-pill risk-pill-${normalized}"><i class="bi ${icon}"></i>${normalized} Risk</span>`;
         }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function buildWhyBlock(points) {
+            if (!Array.isArray(points) || points.length === 0) {
+                return '';
+            }
+            const items = points.map((point) => `<li>${escapeHtml(point)}</li>`).join('');
+            return `<div class="why-box"><div class="why-title">Why?</div><ul>${items}</ul></div>`;
+        }
+
+        function buildDashboardBlock(data) {
+            const scoreValue = Number(data.flare_up_risk_score ?? 0);
+            const scorePct = Math.max(0, Math.min(100, Math.round(scoreValue * 10)));
+            const confidencePct = Math.max(0, Math.min(100, Number(data.confidence_percent ?? 0)));
+            return `<div class="viz-grid">
+                <div class="viz-card">
+                    <div class="label">Risk Gauge</div>
+                    <div class="value">${escapeHtml(scoreValue)}/10</div>
+                    <div class="gh-progress"><div class="gh-progress-fill gh-progress-risk" style="width:${scorePct}%;"></div></div>
+                </div>
+                <div class="viz-card">
+                    <div class="label">Confidence</div>
+                    <div class="value">${escapeHtml(confidencePct)}%</div>
+                    <div class="gh-progress"><div class="gh-progress-fill gh-progress-confidence" style="width:${confidencePct}%;"></div></div>
+                </div>
+                <div class="viz-card">
+                    <div class="label">Auto PRAL</div>
+                    <div class="value">${escapeHtml(data.pral_score ?? 'N/A')}</div>
+                    <div class="small text-muted">Source: ${escapeHtml(data.pral_source ?? 'unknown')}</div>
+                </div>
+                <div class="viz-card">
+                    <div class="label">Condition Status</div>
+                    <div class="value">${escapeHtml(data.recommendation ?? 'Use Caution')}</div>
+                    <div class="small text-muted">Based on meal profile and condition context.</div>
+                </div>
+            </div>`;
+        }
+
+        function buildAlternativesBlock(alternatives) {
+            if (!Array.isArray(alternatives) || alternatives.length === 0) {
+                return '';
+            }
+            const rows = alternatives.map((item) => {
+                const pralText = item.pral_score === null || item.pral_score === undefined ? '' : ` (PRAL: ${escapeHtml(item.pral_score)})`;
+                return `<div class="alt-item"><strong>${escapeHtml(item.food)}</strong><div class="small">${escapeHtml(item.reason)}${pralText}</div></div>`;
+            }).join('');
+            return `<div class="alt-box"><div class="alt-title">Healthier Alternatives</div>${rows}</div>`;
+        }
+
+        const mealChatBox = document.getElementById('mealChatBox');
+        const mealChatLog = document.getElementById('mealChatLog');
+        const mealChatInput = document.getElementById('mealChatInput');
+        const mealChatSend = document.getElementById('mealChatSend');
+
+        async function sendFollowupQuestion() {
+            const question = mealChatInput.value.trim();
+            if (!question) {
+                return;
+            }
+            mealChatLog.innerHTML += `<div class="chat-msg"><strong>You:</strong> ${escapeHtml(question)}</div>`;
+            mealChatInput.value = '';
+            try {
+                const response = await fetch('/meal_followup_chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+                const data = await response.json();
+                if (data.error) {
+                    mealChatLog.innerHTML += `<div class="chat-msg"><strong>Coach:</strong> ${escapeHtml(data.error)}</div>`;
+                } else {
+                    mealChatLog.innerHTML += `<div class="chat-msg"><strong>Coach:</strong> ${escapeHtml(data.answer)}</div>`;
+                }
+            } catch (error) {
+                mealChatLog.innerHTML += `<div class="chat-msg"><strong>Coach:</strong> I could not answer right now. Please try again.</div>`;
+            }
+            mealChatLog.scrollTop = mealChatLog.scrollHeight;
+        }
+
+        mealChatSend.addEventListener('click', sendFollowupQuestion);
+        mealChatInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                sendFollowupQuestion();
+            }
+        });
         
         if(!foodName) {
             alert("Please enter a food first!");
@@ -378,7 +701,6 @@
         const requestData = {
             "Food_Name": foodName,
             "Meal_Type": document.getElementById('mealType').value,
-            "Meal_PRAL_Score": pralInput.value.trim() === '' ? null : parseFloat(pralInput.value),
             "Water_Consumed_ml": parseInt(document.getElementById('waterIntake').value) || 0,
             "Stress_At_Meal": document.getElementById('stressLevel').value
         };
@@ -416,7 +738,10 @@
                     aiBox.style.borderColor = "#a5d6a7";
                 }
 
-                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${data.title}</strong>${buildRiskPill(data.risk_level)} Risk Score: ${score}/10<br>Confidence: ${data.confidence_label ?? 'N/A'} (${data.confidence_percent ?? 'N/A'}%)<br>${data.message}<div class="small mt-2 opacity-75">Generated at: ${data.generated_at}</div>`;
+                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${escapeHtml(data.title)}</strong>${buildRiskPill(data.risk_level)} Risk Score: ${escapeHtml(score)}/10<br>Confidence: ${escapeHtml(data.confidence_label ?? 'N/A')} (${escapeHtml(data.confidence_percent ?? 'N/A')}%)<br>${escapeHtml(data.message)}<div class="final-reco"><div class="label">Final Recommendation</div><div class="value">${escapeHtml(data.recommendation ?? 'Use Caution')}</div><div class="reason">${escapeHtml(data.recommendation_reason ?? 'Review meal details and monitor symptoms after eating.')}</div></div>${buildDashboardBlock(data)}${buildWhyBlock(data.why_points)}${buildAlternativesBlock(data.alternatives)}<div class="small mt-2 opacity-75">Generated at: ${escapeHtml(data.generated_at)}</div>`;
+                pralInput.value = (data.pral_score ?? '').toString();
+                pralHint.textContent = `Auto-calculated PRAL: ${data.pral_score ?? 'N/A'} (${data.pral_source ?? 'unknown'})`;
+                mealChatBox.style.display = 'block';
             }
         } catch (error) {
             aiBox.innerHTML = `<i class="bi bi-wifi-off"></i> Could not connect to AI Engine. Make sure Flask is running!`;
