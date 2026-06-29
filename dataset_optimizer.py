@@ -16,6 +16,26 @@ df_baseline = df_original[baseline_cols].copy()
 # 3. Create the Event Generator Logic
 # We will simulate 3 days of meal logs (Breakfast, Lunch, Dinner) for each user
 meal_types = ['Breakfast', 'Lunch', 'Dinner']
+meal_food_catalog = {
+    'Breakfast': {
+        'Western': ['Bacon and Eggs', 'Pancakes', 'Sausage Sandwich'],
+        'Vegan': ['Oatmeal with Banana', 'Fruit Smoothie Bowl', 'Tofu Scramble'],
+        'Vegetarian': ['Greek Yogurt and Berries', 'Avocado Toast', 'Cheese Omelet'],
+        'Default': ['Scrambled Eggs', 'Toast and Tea', 'Plain Oatmeal']
+    },
+    'Lunch': {
+        'Western': ['Cheeseburger', 'Fried Chicken Wrap', 'Pepperoni Pizza Slice'],
+        'Vegan': ['Lentil Salad', 'Quinoa Bowl', 'Chickpea Wrap'],
+        'Vegetarian': ['Vegetable Pasta', 'Paneer Wrap', 'Tomato Soup'],
+        'Default': ['Rice and Vegetables', 'Chicken Soup', 'Turkey Sandwich']
+    },
+    'Dinner': {
+        'Western': ['Steak and Fries', 'Spicy Wings', 'Loaded Nachos'],
+        'Vegan': ['Grilled Tofu Stir Fry', 'Vegetable Curry', 'Bean Chili'],
+        'Vegetarian': ['Mushroom Risotto', 'Vegetable Lasagna', 'Spinach Pasta'],
+        'Default': ['Baked Fish and Rice', 'Chicken and Potatoes', 'Vegetable Stew']
+    }
+}
 logs = []
 
 print("Optimizing dataset into event-based logs...")
@@ -28,6 +48,10 @@ for index, user in df_baseline.iterrows():
         current_date = start_date + timedelta(days=day_offset)
         
         for meal in meal_types:
+            diet_pattern = str(user.get('Diet_Pattern', 'Default'))
+            food_options = meal_food_catalog[meal].get(diet_pattern, meal_food_catalog[meal]['Default'])
+            chosen_food = random.choice(food_options)
+
             # Assign a realistic timestamp
             if meal == 'Breakfast':
                 meal_time = current_date.replace(hour=random.randint(7, 9), minute=random.randint(0, 59))
@@ -68,6 +92,7 @@ for index, user in df_baseline.iterrows():
                 'Primary_Condition': user['Primary_Condition'],
                 'H_Pylori_Result': user['H_Pylori_Test_Result'],
                 'Timestamp': meal_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'Food_Name': chosen_food,
                 'Meal_Type': meal,
                 'Meal_PRAL_Score': pral_score,
                 'Water_Consumed_ml': water_ml,

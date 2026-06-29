@@ -142,6 +142,13 @@ def to_float(value, default):
         return float(default)
 
 
+def normalize_food_name(value):
+    if value is None:
+        return "unknown food"
+    text = str(value).strip().lower()
+    return text if text else "unknown food"
+
+
 def build_prediction_result(score):
     raw_score = float(score)
     score = round(raw_score, 1)
@@ -629,18 +636,25 @@ def check():
     if not is_logged_in():
         return redirect(url_for("login"))
 
-    food_query = request.form["food"].strip().lower()
+    food_input = request.form["food"].strip()
+    if not food_input:
+        flash("Please enter a food name.")
+        return redirect(url_for("diet_checker"))
+
+    food_query = food_input.lower()
     condition = session["condition"]
     column = CONDITION_COLUMN_MAP.get(condition, "gastritis_status")
 
     with get_db() as conn:
         row = conn.execute(f"SELECT food_name, {column} AS status FROM food_rules WHERE LOWER(food_name) = ?", (food_query,)).fetchone()
-        
+
         if row:
-            conn.execute("INSERT INTO food_logs (user_id, food_name) VALUES (?, ?)", (session["user_id"], row["food_name"]))
             res_food, res_status = row["food_name"], row["status"]
         else:
-            res_food, res_status = food_query, "unknown"
+            res_food, res_status = food_input, "unknown"
+
+        # Always save what the user checked so history is complete, even for unknown foods.
+        conn.execute("INSERT INTO food_logs (user_id, food_name) VALUES (?, ?)", (session["user_id"], res_food))
 
     # Redirect to the diet_checker page with result data in the URL
     return redirect(url_for("diet_checker", food=res_food, status=res_status))
@@ -674,7 +688,7 @@ def predict_risk():
         if condition_value != "hpylori":
             hpylori_value = "Not Applicable"
         meal_pral = payload.get("Meal_PRAL_Score")
-        food_name = (payload.get("Food_Name") or "").strip()
+        food_name = normalize_food_name(payload.get("Food_Name"))
         if meal_pral in (None, ""):
             looked_up_pral = lookup_pral_score(food_name)
             meal_pral = looked_up_pral if looked_up_pral is not None else 0
@@ -683,6 +697,7 @@ def predict_risk():
             "BMI": to_float(profile_row["bmi"], 24.5),
             "Primary_Condition": MODEL_CONDITION_MAP.get(condition_value, "General"),
             "H_Pylori_Result": hpylori_value,
+            "Food_Name": food_name,
             "Meal_Type": payload.get("Meal_Type", "Lunch"),
             "Meal_PRAL_Score": to_float(meal_pral, 0),
             "Water_Consumed_ml": int(to_float(payload.get("Water_Consumed_ml"), 200)),

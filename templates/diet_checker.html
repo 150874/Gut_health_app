@@ -143,6 +143,34 @@
             padding: 15px;
             display: none; /* Hidden until AI responds */
         }
+        .risk-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.75rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-weight: 800;
+            border-radius: 999px;
+            padding: 0.28rem 0.58rem;
+            margin-left: 0.5rem;
+            border: 1px solid transparent;
+        }
+        .risk-pill-high {
+            background: #ffdfe4;
+            color: #a61e3a;
+            border-color: #f0a8b5;
+        }
+        .risk-pill-moderate {
+            background: #fff3cf;
+            color: #9a6a00;
+            border-color: #f3d78a;
+        }
+        .risk-pill-low {
+            background: #dcf7e8;
+            color: #0b6b43;
+            border-color: #9fd8be;
+        }
         .fade-in-up {
             animation: fadeInUp 0.45s ease both;
         }
@@ -230,8 +258,13 @@
 
             <div id="aiResultBox" class="ai-box mb-3" {% if prediction_result %}style="display:block;"{% endif %}>
                 {% if prediction_result %}
+                    {% set initial_level = prediction_result.level if prediction_result.level is defined and prediction_result.level else ('high' if prediction_result.score >= 7 else ('moderate' if prediction_result.score >= 4 else 'low')) %}
                     <i class="bi bi-stars"></i>
                     <strong>{{ prediction_result.title }}</strong>
+                    <span class="risk-pill risk-pill-{{ initial_level }}">
+                        <i class="bi {% if initial_level == 'high' %}bi-traffic-cone{% elif initial_level == 'moderate' %}bi-exclamation-diamond{% else %}bi-check-circle{% endif %}"></i>
+                        {{ initial_level }} Risk
+                    </span>
                     Risk Score: {{ prediction_result.score }}/10<br>
                     Confidence: {{ prediction_result.confidence_label or 'N/A' }} ({{ prediction_result.confidence_percent or 'N/A' }}%)<br>
                     {{ prediction_result.message }}
@@ -250,7 +283,16 @@
                 {% if status == 'safe' %}<i class="bi bi-emoji-smile"></i>
                 {% elif status == 'avoid' %}<i class="bi bi-emoji-frown"></i>
                 {% else %}<i class="bi bi-question-circle"></i>{% endif %}
-                <span class="text-capitalize">{{ food }}</span>: <span class="text-uppercase">{{ status }}</span>
+                {% if status == 'safe' %}
+                    <span class="text-capitalize">{{ food }}</span>: <strong>Safe to Consume</strong>
+                    <div class="small mt-1">Good fit for your {{ condition|capitalize }} condition.</div>
+                {% elif status == 'avoid' %}
+                    <span class="text-capitalize">{{ food }}</span>: <strong>Unsafe to Consume</strong>
+                    <div class="small mt-1">Not recommended for your {{ condition|capitalize }} condition.</div>
+                {% else %}
+                    <span class="text-capitalize">{{ food }}</span>: <strong>Needs Review</strong>
+                    <div class="small mt-1">This food is not in the condition rules yet. Use the AI risk score as guidance.</div>
+                {% endif %}
             </div>
         </div>
         {% endif %}
@@ -314,6 +356,14 @@
     document.getElementById('aiPredictBtn').addEventListener('click', async function() {
         const aiBox = document.getElementById('aiResultBox');
         const foodName = document.getElementById('foodInput').value.trim();
+
+        function buildRiskPill(level) {
+            const normalized = (level === 'high' || level === 'moderate' || level === 'low') ? level : 'low';
+            const icon = normalized === 'high'
+                ? 'bi-traffic-cone'
+                : (normalized === 'moderate' ? 'bi-exclamation-diamond' : 'bi-check-circle');
+            return `<span class="risk-pill risk-pill-${normalized}"><i class="bi ${icon}"></i>${normalized} Risk</span>`;
+        }
         
         if(!foodName) {
             alert("Please enter a food first!");
@@ -366,7 +416,7 @@
                     aiBox.style.borderColor = "#a5d6a7";
                 }
 
-                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${data.title}</strong> Risk Score: ${score}/10<br>Confidence: ${data.confidence_label ?? 'N/A'} (${data.confidence_percent ?? 'N/A'}%)<br>${data.message}<div class="small mt-2 opacity-75">Generated at: ${data.generated_at}</div>`;
+                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${data.title}</strong>${buildRiskPill(data.risk_level)} Risk Score: ${score}/10<br>Confidence: ${data.confidence_label ?? 'N/A'} (${data.confidence_percent ?? 'N/A'}%)<br>${data.message}<div class="small mt-2 opacity-75">Generated at: ${data.generated_at}</div>`;
             }
         } catch (error) {
             aiBox.innerHTML = `<i class="bi bi-wifi-off"></i> Could not connect to AI Engine. Make sure Flask is running!`;

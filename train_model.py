@@ -22,10 +22,21 @@ print("Loading optimized dataset...")
 # 1. Load the data
 df = pd.read_csv('optimized_meal_logs_dataset.csv')
 
+if 'Food_Name' in df.columns:
+	df['Food_Name'] = (
+		df['Food_Name']
+		.fillna('Unknown Food')
+		.astype(str)
+		.str.strip()
+		.str.lower()
+	)
+else:
+	df['Food_Name'] = 'unknown food'
+
 # 2. Select Features (X) and Target (y)
 # We drop User_ID and Timestamp because the model shouldn't learn from names/dates.
 # We also drop the Target variable from X.
-X_raw = df.drop(columns=['User_ID', 'Timestamp', 'Symptom_Flare_Up_Score'])
+X_raw = df.drop(columns=['User_ID', 'Timestamp', 'Symptom_Flare_Up_Score'], errors='ignore')
 y = df['Symptom_Flare_Up_Score']
 
 # 3. Handle Categorical Data (One-Hot Encoding)

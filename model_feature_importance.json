@@ -1,77 +1,85 @@
 {
-  "trained_at": "2026-06-29T07:52:34Z",
+  "trained_at": "2026-06-29T08:51:40Z",
   "top_features": [
     {
       "feature": "Meal_PRAL_Score",
-      "importance": 0.391924
+      "importance": 0.367524
     },
     {
       "feature": "Water_Consumed_ml",
-      "importance": 0.142768
+      "importance": 0.140403
     },
     {
       "feature": "Stress_At_Meal_High",
-      "importance": 0.14259
+      "importance": 0.139235
     },
     {
       "feature": "BMI",
-      "importance": 0.098363
+      "importance": 0.083696
     },
     {
       "feature": "Age",
-      "importance": 0.074407
+      "importance": 0.064725
     },
     {
       "feature": "Primary_Condition_GERD",
-      "importance": 0.062586
+      "importance": 0.062732
     },
     {
       "feature": "Meal_Type_Dinner",
-      "importance": 0.039035
+      "importance": 0.038554
     },
     {
       "feature": "H_Pylori_Result_Positive",
-      "importance": 0.006482
+      "importance": 0.005705
     },
     {
       "feature": "H_Pylori_Result_Negative",
-      "importance": 0.006351
+      "importance": 0.005631
     },
     {
       "feature": "Primary_Condition_Gastritis",
-      "importance": 0.006103
-    },
-    {
-      "feature": "Meal_Type_Lunch",
-      "importance": 0.004805
-    },
-    {
-      "feature": "Meal_Type_Breakfast",
-      "importance": 0.004693
+      "importance": 0.005267
     },
     {
       "feature": "Primary_Condition_H_Pylori",
-      "importance": 0.004187
-    },
-    {
-      "feature": "Stress_At_Meal_Moderate",
-      "importance": 0.003764
+      "importance": 0.003552
     },
     {
       "feature": "Stress_At_Meal_Low",
-      "importance": 0.003716
+      "importance": 0.003267
+    },
+    {
+      "feature": "Stress_At_Meal_Moderate",
+      "importance": 0.003261
+    },
+    {
+      "feature": "Food_Name_turkey sandwich",
+      "importance": 0.003166
+    },
+    {
+      "feature": "Food_Name_plain oatmeal",
+      "importance": 0.00316
+    },
+    {
+      "feature": "Food_Name_rice and vegetables",
+      "importance": 0.003146
+    },
+    {
+      "feature": "Food_Name_toast and tea",
+      "importance": 0.003137
+    },
+    {
+      "feature": "Food_Name_chicken soup",
+      "importance": 0.003072
+    },
+    {
+      "feature": "Food_Name_scrambled eggs",
+      "importance": 0.002968
     },
     {
       "feature": "Primary_Condition_IBS",
-      "importance": 0.003095
-    },
-    {
-      "feature": "Primary_Condition_Healthy",
-      "importance": 0.002677
-    },
-    {
-      "feature": "Primary_Condition_Constipation",
-      "importance": 0.002456
+      "importance": 0.0029
     }
   ]
 }

@@ -28,5 +28,35 @@
       "f1_mean": 0.5669,
       "balanced_accuracy_mean": 0.7121
     }
+  },
+  {
+    "trained_at": "2026-06-29T08:51:40Z",
+    "sample_count": 72000,
+    "feature_count": 54,
+    "mae": 1.082,
+    "rmse": 1.289,
+    "r2": 0.643,
+    "flare_threshold": 5,
+    "recall": 0.459,
+    "precision": 0.766,
+    "f1": 0.574,
+    "balanced_accuracy": 0.716,
+    "roc_auc": 0.948,
+    "confusion_matrix": {
+      "tn": 11743,
+      "fp": 327,
+      "fn": 1260,
+      "tp": 1070
+    },
+    "cross_validation": {
+      "folds": 5,
+      "mae_mean": 1.0945,
+      "rmse_mean": 1.3039,
+      "r2_mean": 0.627,
+      "recall_mean": 0.4514,
+      "precision_mean": 0.7577,
+      "f1_mean": 0.5657,
+      "balanced_accuracy_mean": 0.7117
+    }
   }
 ]
