@@ -1,0 +1,77 @@
+{
+  "trained_at": "2026-06-29T07:52:34Z",
+  "top_features": [
+    {
+      "feature": "Meal_PRAL_Score",
+      "importance": 0.391924
+    },
+    {
+      "feature": "Water_Consumed_ml",
+      "importance": 0.142768
+    },
+    {
+      "feature": "Stress_At_Meal_High",
+      "importance": 0.14259
+    },
+    {
+      "feature": "BMI",
+      "importance": 0.098363
+    },
+    {
+      "feature": "Age",
+      "importance": 0.074407
+    },
+    {
+      "feature": "Primary_Condition_GERD",
+      "importance": 0.062586
+    },
+    {
+      "feature": "Meal_Type_Dinner",
+      "importance": 0.039035
+    },
+    {
+      "feature": "H_Pylori_Result_Positive",
+      "importance": 0.006482
+    },
+    {
+      "feature": "H_Pylori_Result_Negative",
+      "importance": 0.006351
+    },
+    {
+      "feature": "Primary_Condition_Gastritis",
+      "importance": 0.006103
+    },
+    {
+      "feature": "Meal_Type_Lunch",
+      "importance": 0.004805
+    },
+    {
+      "feature": "Meal_Type_Breakfast",
+      "importance": 0.004693
+    },
+    {
+      "feature": "Primary_Condition_H_Pylori",
+      "importance": 0.004187
+    },
+    {
+      "feature": "Stress_At_Meal_Moderate",
+      "importance": 0.003764
+    },
+    {
+      "feature": "Stress_At_Meal_Low",
+      "importance": 0.003716
+    },
+    {
+      "feature": "Primary_Condition_IBS",
+      "importance": 0.003095
+    },
+    {
+      "feature": "Primary_Condition_Healthy",
+      "importance": 0.002677
+    },
+    {
+      "feature": "Primary_Condition_Constipation",
+      "importance": 0.002456
+    }
+  ]
+}

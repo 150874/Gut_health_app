@@ -166,6 +166,9 @@
             <h1 class="h5 mb-0 fw-bold">AI Diet Checker</h1>
             <div class="brand-pill mt-1">Gut Health Companion</div>
         </div>
+        <div class="ms-auto">
+            <a href="{{ url_for('profile') }}" class="btn btn-outline-primary btn-sm rounded-pill">Profile</a>
+        </div>
     </div>
 </div>
 
@@ -177,6 +180,9 @@
         </div>
         <p class="text-muted mb-4">
             <i class="bi bi-person-circle me-1"></i> Condition: <strong id="userCondition">{{ condition }}</strong>
+        </p>
+        <p class="text-muted small mb-3">
+            Profile used by AI: Age <strong>{{ user_profile.age }}</strong>, BMI <strong>{{ user_profile.bmi }}</strong>, H. pylori <strong>{{ user_profile.h_pylori_result }}</strong>
         </p>
         
         <form action="/check" method="POST" id="dietForm" class="mb-2">
@@ -208,6 +214,14 @@
                         <option value="High">High</option>
                     </select>
                 </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="pralScoreInput">
+                    <i class="bi bi-activity me-1"></i> Meal PRAL Score (estimated)
+                </label>
+                <input type="number" step="0.1" class="form-control" id="pralScoreInput" placeholder="e.g. 3.5">
+                <div class="small text-muted mt-1" id="pralHint">Use positive values for more acidic load and negative for alkalizing meals.</div>
             </div>
 
             <button type="button" id="aiPredictBtn" class="btn btn-ai w-100 mb-3">
@@ -265,10 +279,40 @@
 </div>
 
 <script>
+    async function lookupPral(foodName) {
+        if (!foodName) {
+            return null;
+        }
+        try {
+            const response = await fetch(`/api/pral-lookup?food=${encodeURIComponent(foodName)}`);
+            const data = await response.json();
+            if (data.found) {
+                return data.pral_score;
+            }
+            return null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    const foodInput = document.getElementById('foodInput');
+    const pralInput = document.getElementById('pralScoreInput');
+    const pralHint = document.getElementById('pralHint');
+
+    foodInput.addEventListener('blur', async function() {
+        const foodName = foodInput.value.trim();
+        const lookedUp = await lookupPral(foodName);
+        if (lookedUp !== null) {
+            pralInput.value = lookedUp;
+            pralHint.textContent = `Auto-filled from PRAL knowledge base: ${lookedUp}`;
+        } else {
+            pralHint.textContent = 'No PRAL value found for this food. Enter a manual estimate.';
+        }
+    });
+
     document.getElementById('aiPredictBtn').addEventListener('click', async function() {
         const aiBox = document.getElementById('aiResultBox');
-        const foodName = document.getElementById('foodInput').value;
-        const condition = document.getElementById('userCondition').innerText || 'GERD';
+        const foodName = document.getElementById('foodInput').value.trim();
         
         if(!foodName) {
             alert("Please enter a food first!");
@@ -279,15 +323,11 @@
         aiBox.style.display = 'block';
         aiBox.innerHTML = `<i class="bi bi-hourglass-split"></i> AI is analyzing the chemical impact of ${foodName}...`;
 
-        // 2. Build the exact data structure your Python model expects
-        // (Note: Age and BMI are mocked here. Later, you can fetch these from the logged-in user's database profile)
+        // 2. Send meal context only; backend fills profile data from the logged-in account.
         const requestData = {
-            "Age": 30, 
-            "BMI": 24.5, 
-            "Primary_Condition": condition, 
-            "H_Pylori_Result": "Negative", 
+            "Food_Name": foodName,
             "Meal_Type": document.getElementById('mealType').value,
-            "Meal_PRAL_Score": 4.5, // Mock PRAL score (later connected to your food database)
+            "Meal_PRAL_Score": pralInput.value.trim() === '' ? null : parseFloat(pralInput.value),
             "Water_Consumed_ml": parseInt(document.getElementById('waterIntake').value) || 0,
             "Stress_At_Meal": document.getElementById('stressLevel').value
         };

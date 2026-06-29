@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Settings - Gut Health</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --gh-blue: #1f5f8f;
+            --gh-bg: #f5fbff;
+            --gh-border: #d7e6ef;
+        }
+        body {
+            background: linear-gradient(180deg, #fbfeff 0%, var(--gh-bg) 100%);
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+        .panel {
+            border: 1px solid var(--gh-border);
+            border-radius: 18px;
+            box-shadow: 0 10px 22px rgba(20, 70, 104, 0.08);
+            background: #fff;
+        }
+        .form-label {
+            font-weight: 600;
+            color: #476072;
+            font-size: 0.84rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .form-control,
+        .form-select {
+            border-radius: 12px;
+            border: 1px solid #d5e4ee;
+        }
+        .btn-save {
+            border-radius: 12px;
+            font-weight: 700;
+            background: var(--gh-blue);
+            border: none;
+        }
+        .btn-save:hover {
+            background: #184f78;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-light bg-white border-bottom py-3 mb-4 shadow-sm">
+    <div class="container" style="max-width: 900px;">
+        <a class="navbar-brand fw-bold" href="{{ url_for('home') }}">
+            <i class="bi bi-heart-pulse-fill text-primary me-2"></i> GutHealth
+        </a>
+        <div>
+            <a href="{{ url_for('home') }}" class="btn btn-outline-secondary btn-sm rounded-pill me-2">Home</a>
+            <a href="{{ url_for('logout_page') }}" class="btn btn-outline-danger btn-sm rounded-pill">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="max-width: 900px;">
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="mb-3">
+        {% for message in messages %}
+        <div class="alert alert-info mb-2" role="alert">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <div class="panel p-4">
+        <h1 class="h4 fw-bold mb-1">Profile Settings</h1>
+        <p class="text-muted mb-4">Update your personal health profile. AI prediction uses these values.</p>
+
+        <form method="POST" action="{{ url_for('profile') }}">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" class="form-control" name="name" value="{{ user.name }}" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control" value="{{ user.email }}" disabled>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Main Condition</label>
+                    <select name="condition" class="form-select" id="profileCondition">
+                        <option value="gastritis" {% if user.condition == 'gastritis' %}selected{% endif %}>Gastritis</option>
+                        <option value="gerd" {% if user.condition == 'gerd' %}selected{% endif %}>GERD / Acid Reflux</option>
+                        <option value="hpylori" {% if user.condition == 'hpylori' %}selected{% endif %}>H. pylori Infection</option>
+                        <option value="general" {% if user.condition == 'general' %}selected{% endif %}>General Gut Health</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Age</label>
+                    <input type="number" name="age" min="1" max="120" step="1" class="form-control" value="{{ user.age }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">BMI</label>
+                    <input type="number" name="bmi" min="10" max="70" step="0.1" class="form-control" value="{{ user.bmi }}">
+                </div>
+                <div class="col-md-6" id="profileHpyloriGroup">
+                    <label class="form-label">H. pylori Result</label>
+                    <select name="h_pylori_result" class="form-select" id="profileHpyloriResult">
+                        <option value="Negative" {% if user.h_pylori_result == 'Negative' %}selected{% endif %}>Negative</option>
+                        <option value="Positive" {% if user.h_pylori_result == 'Positive' %}selected{% endif %}>Positive</option>
+                        <option value="Unknown" {% if user.h_pylori_result == 'Unknown' %}selected{% endif %}>Unknown</option>
+                        <option value="Not Applicable" {% if user.h_pylori_result == 'Not Applicable' %}selected{% endif %}>Not Applicable</option>
+                    </select>
+                    <div class="form-text mt-2" style="font-size: 0.75rem;">Used only when main condition is H. pylori.</div>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary btn-save px-4">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const conditionSelect = document.getElementById('profileCondition');
+        const hpyloriGroup = document.getElementById('profileHpyloriGroup');
+        const hpyloriSelect = document.getElementById('profileHpyloriResult');
+
+        function toggleHpyloriField() {
+            const isHpylori = conditionSelect.value === 'hpylori';
+            hpyloriGroup.style.opacity = isHpylori ? '1' : '0.65';
+            hpyloriSelect.disabled = !isHpylori;
+            if (!isHpylori) {
+                hpyloriSelect.value = 'Not Applicable';
+            } else if (hpyloriSelect.value === 'Not Applicable') {
+                hpyloriSelect.value = 'Negative';
+            }
+        }
+
+        conditionSelect.addEventListener('change', toggleHpyloriField);
+        toggleHpyloriField();
+    })();
+</script>
+
+</body>
+</html>

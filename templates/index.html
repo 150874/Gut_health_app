@@ -25,6 +25,7 @@
         </a>
         <div class="d-flex align-items-center">
             <span class="me-3 small text-muted d-none d-md-block">Condition: <strong>{{ session['condition']|capitalize }}</strong></span>
+            <a href="{{ url_for('profile') }}" class="btn btn-outline-primary btn-sm rounded-pill me-2">Profile</a>
             {% if session.get('is_admin') %}
             <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill me-2">Admin</a>
             {% endif %}

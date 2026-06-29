@@ -125,6 +125,10 @@
             background: var(--adm-green-soft);
             border-color: #cce8d7;
         }
+        .history-meta {
+            color: #577184;
+            font-size: 0.82rem;
+        }
     </style>
 </head>
 <body>
@@ -153,6 +157,36 @@
         {% endfor %}
     </div>
     {% endif %}
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Top Model Features</h5>
+            <span class="badge text-bg-dark">Explainability</span>
+        </div>
+        {% if feature_importance.top_features %}
+        <p class="small text-muted mb-3">From run: {{ feature_importance.trained_at or 'N/A' }}</p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th class="text-end">Importance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in feature_importance.top_features %}
+                    <tr>
+                        <td class="user-name">{{ item.feature }}</td>
+                        <td class="text-end">{{ item.importance }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No feature importance file yet. Run train_model.py to generate model_feature_importance.json.</p>
+        {% endif %}
+    </div>
     {% endwith %}
 
     {% set total_users = admin_users|length %}
@@ -196,6 +230,13 @@
             <span class="badge text-bg-success">Training Output</span>
         </div>
         <p class="small text-muted mb-3">Loaded from model_test_results.json.</p>
+        <div class="history-meta mb-3">
+            <strong>Trained:</strong> {{ model_test_results.trained_at or 'N/A' }}
+            <span class="mx-2">|</span>
+            <strong>Samples:</strong> {{ model_test_results.sample_count or 'N/A' }}
+            <span class="mx-2">|</span>
+            <strong>Features:</strong> {{ model_test_results.feature_count or 'N/A' }}
+        </div>
         <div class="row g-3 mb-2">
             <div class="col-md-4">
                 <div class="p-3 bg-white rounded-3 border h-100">
@@ -215,7 +256,54 @@
                     <div class="h5 fw-bold mb-0">{{ model_test_results.flare_threshold }}</div>
                 </div>
             </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-white rounded-3 border h-100">
+                    <div class="small text-muted">RMSE</div>
+                    <div class="h5 fw-bold mb-0">{{ model_test_results.rmse if model_test_results.rmse is not none else 'N/A' }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-white rounded-3 border h-100">
+                    <div class="small text-muted">Precision (Flare)</div>
+                    <div class="h5 fw-bold mb-0">{{ model_test_results.precision if model_test_results.precision is not none else 'N/A' }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-white rounded-3 border h-100">
+                    <div class="small text-muted">F1 (Flare)</div>
+                    <div class="h5 fw-bold mb-0">{{ model_test_results.f1 if model_test_results.f1 is not none else 'N/A' }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-white rounded-3 border h-100">
+                    <div class="small text-muted">Balanced Accuracy</div>
+                    <div class="h5 fw-bold mb-0">{{ model_test_results.balanced_accuracy if model_test_results.balanced_accuracy is not none else 'N/A' }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-white rounded-3 border h-100">
+                    <div class="small text-muted">ROC-AUC</div>
+                    <div class="h5 fw-bold mb-0">{{ model_test_results.roc_auc if model_test_results.roc_auc is not none else 'N/A' }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-white rounded-3 border h-100">
+                    <div class="small text-muted">R2</div>
+                    <div class="h5 fw-bold mb-0">{{ model_test_results.r2 if model_test_results.r2 is not none else 'N/A' }}</div>
+                </div>
+            </div>
         </div>
+        {% if model_test_results.cross_validation %}
+        <div class="p-3 bg-white rounded-3 border mb-3">
+            <div class="small text-muted mb-2">Cross-Validation Summary ({{ model_test_results.cross_validation.folds }} folds)</div>
+            <div class="row g-2">
+                <div class="col-md-3"><strong>MAE:</strong> {{ model_test_results.cross_validation.mae_mean }}</div>
+                <div class="col-md-3"><strong>RMSE:</strong> {{ model_test_results.cross_validation.rmse_mean }}</div>
+                <div class="col-md-3"><strong>R2:</strong> {{ model_test_results.cross_validation.r2_mean }}</div>
+                <div class="col-md-3"><strong>F1:</strong> {{ model_test_results.cross_validation.f1_mean }}</div>
+            </div>
+        </div>
+        {% endif %}
         <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
                 <thead>
@@ -246,6 +334,99 @@
         <p class="text-muted mb-0">Run your training script to generate model_test_results.json, then refresh this page.</p>
     </div>
     {% endif %}
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Training History</h5>
+            <span class="badge text-bg-info">Recent Runs</span>
+        </div>
+        {% if training_history %}
+        <div class="table-responsive mb-2">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Trained At</th>
+                        <th>MAE</th>
+                        <th>RMSE</th>
+                        <th>Recall</th>
+                        <th>Precision</th>
+                        <th>F1</th>
+                        <th>ROC-AUC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in training_history %}
+                    <tr>
+                        <td>{{ run.trained_at or 'N/A' }}</td>
+                        <td>{{ run.mae if run.mae is not none else 'N/A' }}</td>
+                        <td>{{ run.rmse if run.rmse is not none else 'N/A' }}</td>
+                        <td>{{ run.recall if run.recall is not none else 'N/A' }}</td>
+                        <td>{{ run.precision if run.precision is not none else 'N/A' }}</td>
+                        <td>{{ run.f1 if run.f1 is not none else 'N/A' }}</td>
+                        <td>{{ run.roc_auc if run.roc_auc is not none else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No training history yet. Run train_model.py to generate history data.</p>
+        {% endif %}
+    </div>
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Food PRAL Knowledge Base</h5>
+            <span class="badge text-bg-primary">Prediction Input</span>
+        </div>
+        <p class="small text-muted mb-3">Add or update PRAL scores used to auto-fill meal acidity in Diet Checker.</p>
+        <form action="{{ url_for('admin_add_pral') }}" method="POST" class="row g-2 align-items-end mb-3">
+            <div class="col-md-6">
+                <label class="filter-label" for="pralFoodName">Food Name</label>
+                <input id="pralFoodName" name="food_name" class="form-control filter-input" placeholder="e.g. Chicken Soup" required>
+            </div>
+            <div class="col-md-4">
+                <label class="filter-label" for="pralScore">PRAL Score</label>
+                <input id="pralScore" name="pral_score" type="number" step="0.1" class="form-control filter-input" placeholder="e.g. 2.5" required>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Save Entry</button>
+            </div>
+        </form>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Food</th>
+                        <th>PRAL</th>
+                        <th>Source</th>
+                        <th>Updated</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in pral_entries %}
+                    <tr>
+                        <td class="user-name">{{ entry.food_name }}</td>
+                        <td>{{ entry.pral_score }}</td>
+                        <td>{{ entry.source }}</td>
+                        <td class="user-email">{{ entry.updated_at }}</td>
+                        <td class="text-end">
+                            <form action="{{ url_for('admin_delete_pral', entry_id=entry.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this PRAL entry?');">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not pral_entries %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">No PRAL entries yet.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <div class="panel p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -347,6 +528,41 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Admin Audit Log</h5>
+            <span class="badge text-bg-warning text-dark">Security</span>
+        </div>
+        {% if audit_logs %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>Admin</th>
+                        <th>Action</th>
+                        <th>Target</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in audit_logs %}
+                    <tr>
+                        <td class="user-email">{{ log.created_at }}</td>
+                        <td>{{ log.admin_name or 'Unknown' }}</td>
+                        <td>{{ log.action_type }}</td>
+                        <td>{{ log.target }}</td>
+                        <td class="user-email">{{ log.details }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No admin actions logged yet.</p>
+        {% endif %}
     </div>
 </div>
 

@@ -53,6 +53,28 @@ try:
 except Exception:
     model_test_results = None
 
+
+def load_training_history():
+    try:
+        with open('model_training_history.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
+
+
+def load_feature_importance():
+    try:
+        with open('model_feature_importance.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {"trained_at": None, "top_features": []}
+
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 if not os.getenv("FLASK_SECRET_KEY"):
     logging.warning("FLASK_SECRET_KEY is not set. Using an ephemeral key for this run.")
@@ -96,6 +118,13 @@ CONDITION_COLUMN_MAP = {
     "hpylori": "hpylori_status"
 }
 
+MODEL_CONDITION_MAP = {
+    "gastritis": "Gastritis",
+    "gerd": "GERD",
+    "hpylori": "H. Pylori",
+    "general": "General"
+}
+
 
 def get_admin_emails():
     raw = os.getenv("ADMIN_EMAILS", "")
@@ -104,6 +133,13 @@ def get_admin_emails():
 
 def is_admin_email(email):
     return email.strip().lower() in get_admin_emails()
+
+
+def to_float(value, default):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
 
 
 def build_prediction_result(score):
@@ -146,6 +182,17 @@ def get_db():
     finally:
         conn.close()
 
+
+def log_admin_action(action_type, target, details=""):
+    admin_id = session.get("user_id")
+    if not admin_id:
+        return
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO admin_audit_logs (admin_user_id, action_type, target, details) VALUES (?, ?, ?, ?)",
+            (admin_id, action_type, target, details)
+        )
+
 # ---------------------------------------------------
 # INITIALIZATION & SEEDING
 # ---------------------------------------------------
@@ -153,12 +200,14 @@ def init_db():
     with get_db() as conn:
         c = conn.cursor()
         # Create all tables (Users, Food Rules, Logs, Symptoms, Knowledge, Medications)
-        c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password TEXT, condition TEXT, is_admin INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1)")
+        c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password TEXT, condition TEXT, age REAL DEFAULT 30, bmi REAL DEFAULT 24.5, h_pylori_result TEXT DEFAULT 'Negative', is_admin INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1)")
         c.execute("CREATE TABLE IF NOT EXISTS food_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, food_name TEXT UNIQUE, gastritis_status TEXT, gerd_status TEXT, hpylori_status TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS food_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, food_name TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
         c.execute("CREATE TABLE IF NOT EXISTS symptoms (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, symptom TEXT, severity TEXT, note TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
         c.execute("CREATE TABLE IF NOT EXISTS symptom_knowledge (id INTEGER PRIMARY KEY AUTOINCREMENT, symptom_name TEXT UNIQUE, duration TEXT, seek_help TEXT, tips TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS medications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, dosage TEXT, time TEXT, times_per_day INTEGER DEFAULT 1, duration_days INTEGER DEFAULT 14, instructions TEXT, taken_today INTEGER DEFAULT 0, last_taken_date TEXT, total_taken INTEGER DEFAULT 0)")
+        c.execute("CREATE TABLE IF NOT EXISTS food_pral (id INTEGER PRIMARY KEY AUTOINCREMENT, food_name TEXT UNIQUE, pral_score REAL, source TEXT DEFAULT 'manual', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("CREATE TABLE IF NOT EXISTS admin_audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER, action_type TEXT, target TEXT, details TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
 
             # --- Migration: Add total_taken column if missing ---
         c.execute("PRAGMA table_info(medications)")
@@ -173,12 +222,42 @@ def init_db():
             c.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
         if 'is_active' not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+        if 'age' not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN age REAL DEFAULT 30")
+        if 'bmi' not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN bmi REAL DEFAULT 24.5")
+        if 'h_pylori_result' not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN h_pylori_result TEXT DEFAULT 'Negative'")
 
         # Seed data if empty
         c.execute("SELECT COUNT(*) FROM food_rules")
         if c.fetchone()[0] == 0:
             foods = [("Coffee", "avoid", "avoid", "avoid"), ("Banana", "safe", "safe", "safe"), ("Lemon", "safe", "avoid", "neutral"), ("Oatmeal", "safe", "safe", "safe")]
             c.executemany("INSERT INTO food_rules (food_name, gastritis_status, gerd_status, hpylori_status) VALUES (?, ?, ?, ?)", foods)
+
+        c.execute("SELECT COUNT(*) FROM food_pral")
+        if c.fetchone()[0] == 0:
+            pral_seed = [
+                ("Coffee", 4.7, "seed"),
+                ("Banana", -5.5, "seed"),
+                ("Lemon", -2.5, "seed"),
+                ("Oatmeal", -0.8, "seed")
+            ]
+            c.executemany(
+                "INSERT INTO food_pral (food_name, pral_score, source) VALUES (?, ?, ?)",
+                pral_seed
+            )
+
+
+def lookup_pral_score(food_name):
+    if not food_name:
+        return None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT pral_score FROM food_pral WHERE LOWER(food_name) = ?",
+            (food_name.strip().lower(),)
+        ).fetchone()
+    return float(row["pral_score"]) if row else None
 
 def is_logged_in():
     return "user_id" in session
@@ -241,12 +320,83 @@ def admin_dashboard():
     if guard:
         return guard
 
+    training_history = load_training_history()
+    recent_training_history = list(reversed(training_history[-10:]))
+    feature_importance = load_feature_importance()
+
     with get_db() as conn:
         admin_users = conn.execute(
             "SELECT id, name, email, condition, is_admin, is_active FROM users ORDER BY is_admin DESC, id DESC"
         ).fetchall()
+        pral_entries = conn.execute(
+            "SELECT id, food_name, pral_score, source, updated_at FROM food_pral ORDER BY LOWER(food_name) ASC"
+        ).fetchall()
+        audit_logs = conn.execute(
+            "SELECT a.created_at, a.action_type, a.target, a.details, u.name AS admin_name "
+            "FROM admin_audit_logs a LEFT JOIN users u ON u.id = a.admin_user_id "
+            "ORDER BY a.id DESC LIMIT 25"
+        ).fetchall()
 
-    return render_template("admin.html", model_test_results=model_test_results, admin_users=admin_users)
+    return render_template(
+        "admin.html",
+        model_test_results=model_test_results,
+        admin_users=admin_users,
+        training_history=recent_training_history,
+        pral_entries=pral_entries,
+        feature_importance=feature_importance,
+        audit_logs=audit_logs
+    )
+
+
+@app.route("/admin/pral/add", methods=["POST"])
+def admin_add_pral():
+    guard = require_admin()
+    if guard:
+        return guard
+
+    food_name = request.form.get("food_name", "").strip()
+    pral_score = to_float(request.form.get("pral_score"), 0)
+    if not food_name:
+        flash("Food name is required.")
+        return redirect(url_for("admin_dashboard"))
+
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO food_pral (food_name, pral_score, source, updated_at) VALUES (?, ?, 'manual', CURRENT_TIMESTAMP) "
+            "ON CONFLICT(food_name) DO UPDATE SET pral_score = excluded.pral_score, source = 'manual', updated_at = CURRENT_TIMESTAMP",
+            (food_name, pral_score)
+        )
+    log_admin_action("pral_upsert", food_name, f"pral_score={pral_score}")
+    flash("PRAL entry saved.")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/pral/<int:entry_id>/delete", methods=["POST"])
+def admin_delete_pral(entry_id):
+    guard = require_admin()
+    if guard:
+        return guard
+
+    with get_db() as conn:
+        target = conn.execute("SELECT food_name, pral_score FROM food_pral WHERE id = ?", (entry_id,)).fetchone()
+        conn.execute("DELETE FROM food_pral WHERE id = ?", (entry_id,))
+    if target:
+        log_admin_action("pral_delete", target["food_name"], f"pral_score={target['pral_score']}")
+    flash("PRAL entry deleted.")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/api/pral-lookup")
+def pral_lookup_api():
+    if not is_logged_in():
+        return {"error": "Unauthorized"}, 401
+    food_name = request.args.get("food", "").strip()
+    if not food_name:
+        return {"found": False, "pral_score": None}
+    score = lookup_pral_score(food_name)
+    if score is None:
+        return {"found": False, "pral_score": None}
+    return {"found": True, "pral_score": round(float(score), 2)}
 
 
 @app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
@@ -257,7 +407,7 @@ def admin_toggle_user_role(user_id):
 
     current_admin_id = session["user_id"]
     with get_db() as conn:
-        target = conn.execute("SELECT id, is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+        target = conn.execute("SELECT id, name, email, is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
         if not target:
             flash("User not found.")
             return redirect(url_for("admin_dashboard"))
@@ -268,6 +418,8 @@ def admin_toggle_user_role(user_id):
 
         new_role = 0 if target["is_admin"] else 1
         conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_role, user_id))
+    action = "user_promote" if new_role == 1 else "user_demote"
+    log_admin_action(action, target["email"], f"target_name={target['name']}")
 
     flash("User role updated.")
     return redirect(url_for("admin_dashboard"))
@@ -281,7 +433,7 @@ def admin_toggle_user_active(user_id):
 
     current_admin_id = session["user_id"]
     with get_db() as conn:
-        target = conn.execute("SELECT id, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
+        target = conn.execute("SELECT id, name, email, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
         if not target:
             flash("User not found.")
             return redirect(url_for("admin_dashboard"))
@@ -292,6 +444,8 @@ def admin_toggle_user_active(user_id):
 
         new_status = 0 if target["is_active"] else 1
         conn.execute("UPDATE users SET is_active = ? WHERE id = ?", (new_status, user_id))
+    action = "user_activate" if new_status == 1 else "user_deactivate"
+    log_admin_action(action, target["email"], f"target_name={target['name']}")
 
     flash("User status updated.")
     return redirect(url_for("admin_dashboard"))
@@ -302,10 +456,17 @@ def signup():
         hashed_pw = generate_password_hash(request.form["password"])
         email = request.form["email"].strip().lower()
         is_admin = 1 if is_admin_email(email) else 0
+        age = to_float(request.form.get("age"), 30)
+        bmi = to_float(request.form.get("bmi"), 24.5)
+        hpylori = request.form.get("h_pylori_result", "Negative").strip() or "Negative"
+        if request.form["condition"] != "hpylori":
+            hpylori = "Not Applicable"
         try:
             with get_db() as conn:
-                conn.execute("INSERT INTO users (name, email, password, condition, is_admin) VALUES (?, ?, ?, ?, ?)",
-                             (request.form["name"], email, hashed_pw, request.form["condition"], is_admin))
+                conn.execute(
+                    "INSERT INTO users (name, email, password, condition, age, bmi, h_pylori_result, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (request.form["name"], email, hashed_pw, request.form["condition"], age, bmi, hpylori, is_admin)
+                )
             # Mark this browser session so the next successful login can show a first-time welcome.
             session["just_signed_up"] = True
             flash("Account created!")
@@ -333,6 +494,9 @@ def login():
                 "user_id": user["id"],
                 "user_name": user["name"],
                 "condition": user["condition"],
+                "age": to_float(user["age"], 30),
+                "bmi": to_float(user["bmi"], 24.5),
+                "h_pylori_result": (user["h_pylori_result"] or "Negative"),
                 "is_admin": bool(user["is_admin"])
             })
             session["is_first_visit"] = just_signed_up
@@ -346,6 +510,59 @@ def logout_page():
     session.clear()
     flash("Logged out.")
     return redirect(url_for("login"))
+
+
+@app.route("/profile", methods=["GET", "POST"])
+def profile():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        condition = request.form.get("condition", "general").strip().lower()
+        if condition not in CONDITION_COLUMN_MAP and condition != "general":
+            condition = "general"
+
+        age = to_float(request.form.get("age"), 30)
+        bmi = to_float(request.form.get("bmi"), 24.5)
+        hpylori = request.form.get("h_pylori_result", "Negative").strip() or "Negative"
+        if condition != "hpylori":
+            hpylori = "Not Applicable"
+
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE users SET name = ?, condition = ?, age = ?, bmi = ?, h_pylori_result = ? WHERE id = ?",
+                (name, condition, age, bmi, hpylori, user_id)
+            )
+            updated = conn.execute(
+                "SELECT name, condition, age, bmi, h_pylori_result, is_admin FROM users WHERE id = ?",
+                (user_id,)
+            ).fetchone()
+
+        if updated:
+            session["user_name"] = updated["name"]
+            session["condition"] = updated["condition"]
+            session["age"] = to_float(updated["age"], 30)
+            session["bmi"] = to_float(updated["bmi"], 24.5)
+            session["h_pylori_result"] = (updated["h_pylori_result"] or "Negative")
+            session["is_admin"] = bool(updated["is_admin"])
+
+        flash("Profile updated successfully.")
+        return redirect(url_for("profile"))
+
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT name, email, condition, age, bmi, h_pylori_result FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+
+    if not user:
+        flash("Profile not found.")
+        return redirect(url_for("logout_page"))
+
+    return render_template("profile.html", user=user)
 
 # ---------------------------------------------------
 # ROUTES: DIET CHECKER (Fixed AssertionError)
@@ -361,12 +578,22 @@ def diet_checker():
     
     with get_db() as conn:
         recent_logs = conn.execute("SELECT id, food_name, timestamp FROM food_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (session["user_id"],)).fetchall()
+        profile_row = conn.execute(
+            "SELECT age, bmi, h_pylori_result FROM users WHERE id = ?",
+            (session["user_id"],)
+        ).fetchone()
+    user_profile = {
+        "age": to_float(profile_row["age"], 30) if profile_row else 30,
+        "bmi": to_float(profile_row["bmi"], 24.5) if profile_row else 24.5,
+        "h_pylori_result": (profile_row["h_pylori_result"] if profile_row else "Negative") or "Negative"
+    }
     return render_template("diet_checker.html", 
                            food=food, 
                            status=status, 
                            recent_logs=recent_logs, 
                            prediction_result=session.get("last_prediction"),
-                           condition=session["condition"])
+                           condition=session["condition"],
+                           user_profile=user_profile)
 
 @app.route("/check", methods=["POST"])
 def check():
@@ -401,15 +628,38 @@ def predict_risk():
     if not flare_up_model:
         return {"error": "Machine Learning model is offline"}, 500
 
-    # 1. Grab the data the user just submitted from the frontend form
-    # (Assuming we receive JSON data from a Javascript fetch call)
-    user_data = request.json 
-    
-    # Example of what user_data looks like:
-    # {'Age': 30, 'BMI': 24.5, 'Primary_Condition': 'GERD', 'H_Pylori_Result': 'Negative', 
-    #  'Meal_Type': 'Dinner', 'Meal_PRAL_Score': 6.5, 'Water_Consumed_ml': 100, 'Stress_At_Meal': 'High'}
+    payload = request.json or {}
 
     try:
+        with get_db() as conn:
+            profile_row = conn.execute(
+                "SELECT age, bmi, h_pylori_result, condition FROM users WHERE id = ?",
+                (session["user_id"],)
+            ).fetchone()
+
+        if not profile_row:
+            return {"error": "User profile not found"}, 404
+
+        condition_value = (profile_row["condition"] or session.get("condition") or "general").lower()
+        hpylori_value = (profile_row["h_pylori_result"] or "Not Applicable")
+        if condition_value != "hpylori":
+            hpylori_value = "Not Applicable"
+        meal_pral = payload.get("Meal_PRAL_Score")
+        food_name = (payload.get("Food_Name") or "").strip()
+        if meal_pral in (None, ""):
+            looked_up_pral = lookup_pral_score(food_name)
+            meal_pral = looked_up_pral if looked_up_pral is not None else 0
+        user_data = {
+            "Age": to_float(profile_row["age"], 30),
+            "BMI": to_float(profile_row["bmi"], 24.5),
+            "Primary_Condition": MODEL_CONDITION_MAP.get(condition_value, "General"),
+            "H_Pylori_Result": hpylori_value,
+            "Meal_Type": payload.get("Meal_Type", "Lunch"),
+            "Meal_PRAL_Score": to_float(meal_pral, 0),
+            "Water_Consumed_ml": int(to_float(payload.get("Water_Consumed_ml"), 200)),
+            "Stress_At_Meal": payload.get("Stress_At_Meal", "Moderate")
+        }
+
         # 2. Convert the single user entry into a Pandas DataFrame
         input_df = pd.DataFrame([user_data])
 
