@@ -233,6 +233,7 @@
                     <i class="bi bi-stars"></i>
                     <strong>{{ prediction_result.title }}</strong>
                     Risk Score: {{ prediction_result.score }}/10<br>
+                    Confidence: {{ prediction_result.confidence_label or 'N/A' }} ({{ prediction_result.confidence_percent or 'N/A' }}%)<br>
                     {{ prediction_result.message }}
                     <div class="small mt-2 opacity-75">Generated at: {{ prediction_result.generated_at }}</div>
                 {% endif %}
@@ -365,7 +366,7 @@
                     aiBox.style.borderColor = "#a5d6a7";
                 }
 
-                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${data.title}</strong> Risk Score: ${score}/10<br>${data.message}<div class="small mt-2 opacity-75">Generated at: ${data.generated_at}</div>`;
+                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${data.title}</strong> Risk Score: ${score}/10<br>Confidence: ${data.confidence_label ?? 'N/A'} (${data.confidence_percent ?? 'N/A'}%)<br>${data.message}<div class="small mt-2 opacity-75">Generated at: ${data.generated_at}</div>`;
             }
         } catch (error) {
             aiBox.innerHTML = `<i class="bi bi-wifi-off"></i> Could not connect to AI Engine. Make sure Flask is running!`;

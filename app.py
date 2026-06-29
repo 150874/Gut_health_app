@@ -143,7 +143,34 @@ def to_float(value, default):
 
 
 def build_prediction_result(score):
-    score = round(float(score), 1)
+    raw_score = float(score)
+    score = round(raw_score, 1)
+    bounded_score = max(0.0, min(10.0, raw_score))
+
+    # Confidence is higher when the score is farther from decision boundaries (4 and 7).
+    distance_to_boundary = min(abs(bounded_score - 4.0), abs(bounded_score - 7.0))
+    boundary_confidence = min(distance_to_boundary / 3.0, 1.0)
+    confidence_score = 0.55 + (0.40 * boundary_confidence)
+
+    # Calibrate by recent model quality when available.
+    quality_signal = None
+    if isinstance(model_test_results, dict):
+        quality_signal = model_test_results.get("balanced_accuracy")
+    if quality_signal is None and isinstance(model_test_results, dict):
+        quality_signal = model_test_results.get("f1")
+    if isinstance(quality_signal, (int, float)):
+        quality_scaled = max(0.0, min(1.0, float(quality_signal)))
+        confidence_score = (confidence_score * 0.7) + (quality_scaled * 0.3)
+
+    confidence_score = max(0.0, min(1.0, confidence_score))
+    confidence_percent = int(round(confidence_score * 100))
+    if confidence_percent >= 82:
+        confidence_label = "High"
+    elif confidence_percent >= 68:
+        confidence_label = "Moderate"
+    else:
+        confidence_label = "Low"
+
     if score >= 7:
         level = "high"
         title = "DANGER!"
@@ -162,6 +189,8 @@ def build_prediction_result(score):
         "level": level,
         "title": title,
         "message": message,
+        "confidence_percent": confidence_percent,
+        "confidence_label": confidence_label,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
 
@@ -688,6 +717,8 @@ def predict_risk():
             "risk_level": result["level"],
             "title": result["title"],
             "message": result["message"],
+            "confidence_percent": result["confidence_percent"],
+            "confidence_label": result["confidence_label"],
             "generated_at": result["generated_at"]
         }
 
