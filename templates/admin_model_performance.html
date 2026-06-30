@@ -158,14 +158,17 @@
                 <h1 class="h3 fw-bold mb-1">Model Performance Center</h1>
                 <p class="text-muted mb-0">A cleaner view of model quality, trend, and target gap.</p>
             </div>
-            <span class="badge text-bg-success">Latest Run: {{ model_test_results.trained_at or 'N/A' }}</span>
         </div>
         <div class="history-meta mb-2">
+            <strong>Selected Model:</strong> {{ model_test_results.model_name or 'N/A' }}
+            <span class="mx-2">|</span>
             <strong>Samples:</strong> {{ model_test_results.sample_count or 'N/A' }}
             <span class="mx-2">|</span>
             <strong>Features:</strong> {{ model_test_results.feature_count or 'N/A' }}
             <span class="mx-2">|</span>
             <strong>Threshold:</strong> {{ model_test_results.flare_threshold or 'N/A' }}
+            <span class="mx-2">|</span>
+            <strong>Optimized Threshold:</strong> {{ model_test_results.optimized_flare_threshold or model_test_results.flare_threshold or 'N/A' }}
         </div>
         <div class="row g-3 mt-1">
             <div class="col-md-3"><div class="metric-chip"><div class="metric-label">F1 (Flare)</div><div class="metric-value">{{ model_test_results.f1 if model_test_results.f1 is not none else 'N/A' }}</div></div></div>
@@ -180,7 +183,6 @@
             <div class="panel p-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h5 class="fw-bold mb-0">Expectation vs Actual</h5>
-                    <span class="badge text-bg-light border">Target Gap</span>
                 </div>
                 <div class="chart-card">
                     <canvas id="expectationVsActualChart" width="720" height="255"></canvas>
@@ -191,7 +193,6 @@
             <div class="panel p-3" style="background:#fffdf5; border-color:#f2e3b3;">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h5 class="fw-bold mb-0">Quality Trend</h5>
-                    <span class="badge text-bg-warning text-dark">Recent Runs</span>
                 </div>
                 <div class="chart-card" style="height: 300px;">
                     <canvas id="trainingTrendChart" width="500" height="230"></canvas>
@@ -209,6 +210,134 @@
             <div class="col-md-3"><strong>R2:</strong> {{ model_test_results.cross_validation.r2_mean }}</div>
             <div class="col-md-3"><strong>F1:</strong> {{ model_test_results.cross_validation.f1_mean }}</div>
         </div>
+    </div>
+    {% endif %}
+
+    {% if model_test_results.model_candidates %}
+    <div class="panel p-4">
+        <h5 class="fw-bold mb-3">Model Candidate Comparison</h5>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th>MAE</th>
+                        <th>RMSE</th>
+                        <th>Recall</th>
+                        <th>Precision</th>
+                        <th>F1</th>
+                        <th>ROC-AUC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in model_test_results.model_candidates %}
+                    <tr>
+                        <td>
+                            {{ item.model_name }}
+                            {% if item.model_name == model_test_results.model_name %}
+                            <span class="badge text-bg-success ms-2">Selected</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.mae if item.mae is not none else 'N/A' }}</td>
+                        <td>{{ item.rmse if item.rmse is not none else 'N/A' }}</td>
+                        <td>{{ item.recall if item.recall is not none else 'N/A' }}</td>
+                        <td>{{ item.precision if item.precision is not none else 'N/A' }}</td>
+                        <td>{{ item.f1 if item.f1 is not none else 'N/A' }}</td>
+                        <td>{{ item.roc_auc if item.roc_auc is not none else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if model_test_results.threshold_tuning %}
+    <div class="panel p-4">
+        <h5 class="fw-bold mb-3">Threshold Tuning</h5>
+        <p class="small text-muted mb-3">
+            Strategy: {{ model_test_results.threshold_tuning.strategy }} |
+            Precision Floor: {{ model_test_results.threshold_tuning.target_precision_floor }} |
+            Selected: {{ model_test_results.threshold_tuning.selected_threshold }}
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Threshold</th>
+                        <th>Recall</th>
+                        <th>Precision</th>
+                        <th>F1</th>
+                        <th>Balanced Acc</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in model_test_results.threshold_tuning.leaderboard %}
+                    <tr>
+                        <td>
+                            {{ row.threshold }}
+                            {% if row.threshold == model_test_results.threshold_tuning.selected_threshold %}
+                            <span class="badge text-bg-success ms-2">Selected</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.recall }}</td>
+                        <td>{{ row.precision }}</td>
+                        <td>{{ row.f1 }}</td>
+                        <td>{{ row.balanced_accuracy }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if model_test_results.temporal_validation %}
+    <div class="panel p-4">
+        <h5 class="fw-bold mb-3">Temporal Holdout Validation</h5>
+        <div class="row g-2">
+            <div class="col-md-2"><strong>Samples:</strong> {{ model_test_results.temporal_validation.test_samples }}</div>
+            <div class="col-md-2"><strong>MAE:</strong> {{ model_test_results.temporal_validation.mae }}</div>
+            <div class="col-md-2"><strong>RMSE:</strong> {{ model_test_results.temporal_validation.rmse }}</div>
+            <div class="col-md-2"><strong>Recall:</strong> {{ model_test_results.temporal_validation.recall }}</div>
+            <div class="col-md-2"><strong>F1:</strong> {{ model_test_results.temporal_validation.f1 }}</div>
+            <div class="col-md-2"><strong>ROC-AUC:</strong> {{ model_test_results.temporal_validation.roc_auc if model_test_results.temporal_validation.roc_auc is not none else 'N/A' }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if runtime_health %}
+    <div class="panel p-4">
+        <h5 class="fw-bold mb-3">Runtime Health (Last {{ runtime_health.window_hours }}h)</h5>
+        <div class="row g-3 mb-3">
+            <div class="col-md-3"><div class="metric-chip"><div class="metric-label">Requests</div><div class="metric-value">{{ runtime_health.request_count }}</div></div></div>
+            <div class="col-md-3"><div class="metric-chip"><div class="metric-label">Success Rate</div><div class="metric-value">{{ (runtime_health.success_rate * 100)|round(1) if runtime_health.success_rate is not none else 'N/A' }}%</div></div></div>
+            <div class="col-md-2"><div class="metric-chip"><div class="metric-label">P50 (ms)</div><div class="metric-value">{{ runtime_health.latency_ms.p50 }}</div></div></div>
+            <div class="col-md-2"><div class="metric-chip"><div class="metric-label">P95 (ms)</div><div class="metric-value">{{ runtime_health.latency_ms.p95 }}</div></div></div>
+            <div class="col-md-2"><div class="metric-chip"><div class="metric-label">Avg (ms)</div><div class="metric-value">{{ runtime_health.latency_ms.avg }}</div></div></div>
+        </div>
+        {% if runtime_health.slow_routes %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Slow Route</th>
+                        <th>Avg ms</th>
+                        <th>Hits</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for route in runtime_health.slow_routes %}
+                    <tr>
+                        <td>{{ route.route }}</td>
+                        <td>{{ route.avg_ms }}</td>
+                        <td>{{ route.hits }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -248,7 +377,6 @@
     <div class="panel p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="fw-bold mb-0">Training History</h5>
-            <span class="badge text-bg-info">Recent Runs</span>
         </div>
         {% if training_history %}
         <div class="table-responsive mb-2">
@@ -287,7 +415,6 @@
     <div class="panel p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="fw-bold mb-0">Top Model Features</h5>
-            <span class="badge text-bg-dark">At Bottom (Requested)</span>
         </div>
         {% if feature_importance.top_features %}
         <p class="small text-muted mb-3">From run: {{ feature_importance.trained_at or 'N/A' }}</p>
@@ -298,7 +425,7 @@
                 <div class="small text-muted">{{ item.importance }}</div>
             </div>
             <div class="feature-bar">
-                <div class="feature-fill" style="width: {{ (item.importance * 100)|round(2) }}%;"></div>
+                <div class="feature-fill" data-width="{{ (item.importance * 100)|round(2) }}"></div>
             </div>
         </div>
         {% endfor %}
@@ -320,6 +447,15 @@
 <script id="trainingHistoryData" type="application/json">{{ training_history | tojson }}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
+    (function () {
+        const bars = document.querySelectorAll('.feature-fill[data-width]');
+        bars.forEach((bar) => {
+            const width = Number(bar.dataset.width || 0);
+            const clamped = Number.isFinite(width) ? Math.max(0, Math.min(100, width)) : 0;
+            bar.style.width = `${clamped}%`;
+        });
+    })();
+
     (function () {
         const chartEl = document.getElementById('expectationVsActualChart');
         if (!chartEl) return;

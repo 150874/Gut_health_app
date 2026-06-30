@@ -1,85 +1,86 @@
 {
-  "trained_at": "2026-06-29T08:51:40Z",
+  "trained_at": "2026-06-29T13:50:32Z",
+  "model_name": "RandomForest_160",
   "top_features": [
     {
       "feature": "Meal_PRAL_Score",
-      "importance": 0.367524
+      "importance": 0.367334
     },
     {
       "feature": "Water_Consumed_ml",
-      "importance": 0.140403
+      "importance": 0.140583
     },
     {
       "feature": "Stress_At_Meal_High",
-      "importance": 0.139235
+      "importance": 0.139532
     },
     {
       "feature": "BMI",
-      "importance": 0.083696
+      "importance": 0.08392
     },
     {
       "feature": "Age",
-      "importance": 0.064725
+      "importance": 0.064671
     },
     {
       "feature": "Primary_Condition_GERD",
-      "importance": 0.062732
+      "importance": 0.062527
     },
     {
       "feature": "Meal_Type_Dinner",
-      "importance": 0.038554
+      "importance": 0.03847
     },
     {
       "feature": "H_Pylori_Result_Positive",
-      "importance": 0.005705
+      "importance": 0.005635
     },
     {
       "feature": "H_Pylori_Result_Negative",
-      "importance": 0.005631
+      "importance": 0.005565
     },
     {
       "feature": "Primary_Condition_Gastritis",
-      "importance": 0.005267
+      "importance": 0.005253
     },
     {
       "feature": "Primary_Condition_H_Pylori",
-      "importance": 0.003552
+      "importance": 0.003572
     },
     {
       "feature": "Stress_At_Meal_Low",
-      "importance": 0.003267
+      "importance": 0.003313
     },
     {
       "feature": "Stress_At_Meal_Moderate",
-      "importance": 0.003261
-    },
-    {
-      "feature": "Food_Name_turkey sandwich",
-      "importance": 0.003166
+      "importance": 0.003283
     },
     {
       "feature": "Food_Name_plain oatmeal",
-      "importance": 0.00316
-    },
-    {
-      "feature": "Food_Name_rice and vegetables",
-      "importance": 0.003146
+      "importance": 0.003144
     },
     {
       "feature": "Food_Name_toast and tea",
-      "importance": 0.003137
+      "importance": 0.003141
+    },
+    {
+      "feature": "Food_Name_rice and vegetables",
+      "importance": 0.003121
+    },
+    {
+      "feature": "Food_Name_turkey sandwich",
+      "importance": 0.003121
     },
     {
       "feature": "Food_Name_chicken soup",
-      "importance": 0.003072
+      "importance": 0.00306
     },
     {
       "feature": "Food_Name_scrambled eggs",
-      "importance": 0.002968
+      "importance": 0.002969
     },
     {
       "feature": "Primary_Condition_IBS",
-      "importance": 0.0029
+      "importance": 0.002931
     }
   ]
 }

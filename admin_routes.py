@@ -14,6 +14,7 @@ def register_admin_routes(
     lookup_pral_score,
     estimate_pral_score,
     get_model_test_results,
+    get_runtime_health,
 ):
     @app.route("/admin")
     def admin_dashboard():
@@ -59,6 +60,7 @@ def register_admin_routes(
             model_test_results=get_model_test_results(),
             training_history=recent_training_history,
             feature_importance=feature_importance,
+            runtime_health=get_runtime_health(),
         )
 
     @app.route("/admin/users")

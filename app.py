@@ -1,10 +1,11 @@
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date, datetime, timedelta
 from contextlib import contextmanager
 import logging
+import time
 import joblib
 import pandas as pd
 import json
@@ -78,7 +79,73 @@ def load_feature_importance():
 
 
 def get_model_test_results():
+    global model_test_results
+    try:
+        with open('model_test_results.json', 'r', encoding='utf-8') as f:
+            model_test_results = json.load(f)
+    except Exception:
+        pass
     return model_test_results
+
+
+def get_prediction_threshold(default=5.0):
+    metrics = get_model_test_results() or {}
+    threshold = metrics.get("optimized_flare_threshold", metrics.get("flare_threshold", default))
+    try:
+        return float(threshold)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def get_runtime_health():
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT route, duration_ms, status_code, created_at "
+            "FROM request_metrics "
+            "WHERE created_at >= datetime('now', '-24 hours') "
+            "ORDER BY id DESC"
+        ).fetchall()
+
+        slow_rows = conn.execute(
+            "SELECT route, COUNT(*) AS hits, ROUND(AVG(duration_ms), 2) AS avg_ms "
+            "FROM request_metrics "
+            "WHERE created_at >= datetime('now', '-24 hours') "
+            "GROUP BY route "
+            "ORDER BY avg_ms DESC, hits DESC "
+            "LIMIT 5"
+        ).fetchall()
+
+    durations = sorted([float(row["duration_ms"] or 0.0) for row in rows])
+
+    def percentile(values, p):
+        if not values:
+            return 0.0
+        idx = max(0, min(len(values) - 1, int(round((p / 100.0) * (len(values) - 1)))))
+        return float(values[idx])
+
+    success_count = sum(1 for row in rows if 200 <= int(row["status_code"] or 0) < 400)
+    error_count = sum(1 for row in rows if int(row["status_code"] or 0) >= 400)
+    total = len(rows)
+
+    return {
+        "window_hours": 24,
+        "request_count": total,
+        "success_rate": round((success_count / total), 4) if total else None,
+        "error_rate": round((error_count / total), 4) if total else None,
+        "latency_ms": {
+            "p50": round(percentile(durations, 50), 2),
+            "p95": round(percentile(durations, 95), 2),
+            "avg": round((sum(durations) / len(durations)), 2) if durations else 0.0,
+        },
+        "slow_routes": [
+            {
+                "route": row["route"],
+                "hits": int(row["hits"] or 0),
+                "avg_ms": float(row["avg_ms"] or 0.0),
+            }
+            for row in slow_rows
+        ],
+    }
 
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 if not os.getenv("FLASK_SECRET_KEY"):
@@ -302,22 +369,97 @@ def build_prediction_why_points(user_data, condition_value, food_name, looked_up
     return points[:5]
 
 
+def get_recent_symptom_burden(user_id):
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN timestamp >= datetime('now', '-7 day') THEN 1 ELSE 0 END) AS recent_count,
+                SUM(CASE WHEN timestamp >= datetime('now', '-14 day') AND timestamp < datetime('now', '-7 day') THEN 1 ELSE 0 END) AS previous_count,
+                SUM(CASE WHEN timestamp >= datetime('now', '-7 day') AND LOWER(severity) = 'severe' THEN 1 ELSE 0 END) AS severe_count,
+                AVG(CASE WHEN timestamp >= datetime('now', '-7 day') THEN
+                    CASE LOWER(severity)
+                        WHEN 'mild' THEN 1.0
+                        WHEN 'moderate' THEN 2.0
+                        WHEN 'severe' THEN 3.0
+                        ELSE 1.0
+                    END
+                END) AS avg_severity
+            FROM symptoms
+            WHERE user_id = ?
+            """,
+            (user_id,)
+        ).fetchone()
+
+    recent_count = int(row["recent_count"] or 0)
+    previous_count = int(row["previous_count"] or 0)
+    severe_count = int(row["severe_count"] or 0)
+    avg_severity = float(row["avg_severity"] or 0.0)
+
+    trend_delta = recent_count - previous_count
+    burden_score = (recent_count * 0.28) + (severe_count * 0.9) + (avg_severity * 1.1) + max(0.0, trend_delta * 0.25)
+    burden_score = max(0.0, min(10.0, burden_score))
+
+    if burden_score >= 7.5:
+        level = "high"
+    elif burden_score >= 4.0:
+        level = "moderate"
+    else:
+        level = "low"
+
+    return {
+        "recent_count": recent_count,
+        "previous_count": previous_count,
+        "severe_count": severe_count,
+        "avg_severity": round(avg_severity, 2),
+        "trend_delta": trend_delta,
+        "burden_score": round(float(burden_score), 2),
+        "burden_level": level,
+    }
+
+
+def calibrate_confidence_from_bins(score):
+    metrics = get_model_test_results() or {}
+    bins = metrics.get("calibration_bins")
+    if not isinstance(bins, list):
+        return None
+    for row in bins:
+        try:
+            min_score = float(row.get("min_score", -1))
+            max_score = float(row.get("max_score", -1))
+            if min_score <= score <= max_score:
+                observed = float(row.get("observed_flare_rate", 0.5))
+                certainty = min(1.0, abs(observed - 0.5) * 2.0)
+                return max(0.0, min(1.0, 0.52 + (0.43 * certainty)))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def build_prediction_result(score):
     raw_score = float(score)
     score = round(raw_score, 1)
     bounded_score = max(0.0, min(10.0, raw_score))
 
-    # Confidence is higher when the score is farther from decision boundaries (4 and 7).
-    distance_to_boundary = min(abs(bounded_score - 4.0), abs(bounded_score - 7.0))
+    threshold = get_prediction_threshold(default=5.0)
+    moderate_threshold = max(3.0, min(8.0, threshold))
+    high_threshold = max(moderate_threshold + 1.5, min(9.2, moderate_threshold + 2.3))
+
+    # Confidence is higher when the score is farther from decision boundaries.
+    distance_to_boundary = min(abs(bounded_score - moderate_threshold), abs(bounded_score - high_threshold))
     boundary_confidence = min(distance_to_boundary / 3.0, 1.0)
     confidence_score = 0.55 + (0.40 * boundary_confidence)
 
+    calibrated_confidence = calibrate_confidence_from_bins(bounded_score)
+    if calibrated_confidence is not None:
+        confidence_score = (confidence_score * 0.65) + (calibrated_confidence * 0.35)
+
     # Calibrate by recent model quality when available.
     quality_signal = None
-    if isinstance(model_test_results, dict):
-        quality_signal = model_test_results.get("balanced_accuracy")
-    if quality_signal is None and isinstance(model_test_results, dict):
-        quality_signal = model_test_results.get("f1")
+    model_metrics = get_model_test_results() or {}
+    quality_signal = model_metrics.get("balanced_accuracy")
+    if quality_signal is None:
+        quality_signal = model_metrics.get("f1")
     if isinstance(quality_signal, (int, float)):
         quality_scaled = max(0.0, min(1.0, float(quality_signal)))
         confidence_score = (confidence_score * 0.7) + (quality_scaled * 0.3)
@@ -331,13 +473,13 @@ def build_prediction_result(score):
     else:
         confidence_label = "Low"
 
-    if score >= 7:
+    if score >= high_threshold:
         level = "high"
         title = "DANGER!"
         message = "High probability of a flare-up. Consider drinking more water or changing the meal."
         recommendation = "Avoid This Meal"
         recommendation_reason = "Your predicted flare-up risk is high for your current condition profile."
-    elif score >= 4:
+    elif score >= moderate_threshold:
         level = "moderate"
         title = "Warning."
         message = "Moderate risk. Proceed with caution."
@@ -362,6 +504,13 @@ def build_prediction_result(score):
         "recommendation_reason": recommendation_reason,
         "confidence_percent": confidence_percent,
         "confidence_label": confidence_label,
+        "calibration_hint": (
+            "Confidence blended with empirical score-to-flare calibration bins."
+            if calibrated_confidence is not None
+            else None
+        ),
+        "decision_threshold": round(float(moderate_threshold), 2),
+        "high_risk_threshold": round(float(high_threshold), 2),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
 
@@ -397,6 +546,8 @@ def assess_prediction_quality(food_name, pral_source, model_columns):
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     try:
         yield conn
         conn.commit()
@@ -433,6 +584,12 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS medications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, dosage TEXT, time TEXT, times_per_day INTEGER DEFAULT 1, duration_days INTEGER DEFAULT 14, instructions TEXT, taken_today INTEGER DEFAULT 0, last_taken_date TEXT, total_taken INTEGER DEFAULT 0)")
         c.execute("CREATE TABLE IF NOT EXISTS food_pral (id INTEGER PRIMARY KEY AUTOINCREMENT, food_name TEXT UNIQUE, pral_score REAL, source TEXT DEFAULT 'manual', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
         c.execute("CREATE TABLE IF NOT EXISTS admin_audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER, action_type TEXT, target TEXT, details TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("CREATE TABLE IF NOT EXISTS request_metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, route TEXT, method TEXT, duration_ms REAL, status_code INTEGER, user_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
+
+        c.execute("CREATE INDEX IF NOT EXISTS idx_food_logs_user_timestamp ON food_logs(user_id, timestamp)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_symptoms_user_timestamp ON symptoms(user_id, timestamp)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_request_metrics_created_at ON request_metrics(created_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_request_metrics_route ON request_metrics(route)")
 
             # --- Migration: Add total_taken column if missing ---
         c.execute("PRAGMA table_info(medications)")
@@ -551,7 +708,38 @@ register_admin_routes(
     lookup_pral_score=lookup_pral_score,
     estimate_pral_score=estimate_pral_score,
     get_model_test_results=get_model_test_results,
+    get_runtime_health=get_runtime_health,
 )
+
+
+@app.before_request
+def start_request_timer():
+    g._request_start_time = time.perf_counter()
+
+
+@app.after_request
+def track_request_metrics(response):
+    start_time = getattr(g, "_request_start_time", None)
+    if start_time is None:
+        return response
+
+    duration_ms = (time.perf_counter() - start_time) * 1000.0
+    route = request.path or "unknown"
+    if route.startswith("/static"):
+        return response
+
+    user_id = session.get("user_id")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "INSERT INTO request_metrics (route, method, duration_ms, status_code, user_id) VALUES (?, ?, ?, ?, ?)",
+            (route, request.method, float(duration_ms), int(response.status_code), user_id)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+    return response
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -762,6 +950,7 @@ def predict_risk():
         meal_type = payload.get("Meal_Type", "Lunch")
         food_name = normalize_food_name(payload.get("Food_Name"))
         meal_pral, pral_source = estimate_pral_score(food_name, meal_type=meal_type)
+        symptom_context = get_recent_symptom_burden(session["user_id"])
         user_data = {
             "Age": to_float(profile_row["age"], 30),
             "BMI": to_float(profile_row["bmi"], 24.5),
@@ -791,7 +980,17 @@ def predict_risk():
 
         # 5. Ask the model to predict the Flare-Up Score!
         prediction = flare_up_model.predict(input_encoded)[0]
-        result = build_prediction_result(prediction)
+        symptom_adjustment = 0.0
+        if symptom_context["burden_level"] == "high":
+            symptom_adjustment = 0.55
+        elif symptom_context["burden_level"] == "moderate":
+            symptom_adjustment = 0.25
+
+        if symptom_context["trend_delta"] >= 3:
+            symptom_adjustment += 0.2
+
+        adjusted_prediction = max(0.0, min(10.0, float(prediction) + symptom_adjustment))
+        result = build_prediction_result(adjusted_prediction)
         quality_info = assess_prediction_quality(food_name, pral_source, model_columns)
 
         if quality_info["is_uncertain"]:
@@ -809,11 +1008,20 @@ def predict_risk():
             food_name=food_name,
             looked_up_pral=meal_pral if pral_source == "knowledge_base" else None
         )
+        if symptom_context["recent_count"] > 0:
+            result["why_points"].insert(
+                1,
+                f"Recent symptom burden is {symptom_context['burden_level']} ({symptom_context['recent_count']} logs in 7 days)."
+            )
         result["why_points"].insert(0, quality_info["reason"])
         result["why_points"] = result["why_points"][:5]
         result["pral_score"] = round(float(meal_pral), 2)
         result["pral_source"] = pral_source
         result["prediction_quality"] = quality_info["quality"]
+        result["symptom_burden"] = symptom_context
+        result["raw_model_score"] = round(float(prediction), 2)
+        result["symptom_adjustment"] = round(float(symptom_adjustment), 2)
+        result["uncertainty_reason"] = quality_info["reason"] if quality_info["is_uncertain"] else None
         if result["level"] == "high":
             result["alternatives"] = suggest_alternative_meals(
                 condition_value=condition_value,
@@ -850,6 +1058,13 @@ def predict_risk():
             "alternatives": result["alternatives"],
             "confidence_percent": result["confidence_percent"],
             "confidence_label": result["confidence_label"],
+            "calibration_hint": result.get("calibration_hint"),
+            "decision_threshold": result.get("decision_threshold"),
+            "high_risk_threshold": result.get("high_risk_threshold"),
+            "raw_model_score": result.get("raw_model_score"),
+            "symptom_adjustment": result.get("symptom_adjustment"),
+            "symptom_burden": result.get("symptom_burden"),
+            "uncertainty_reason": result.get("uncertainty_reason"),
             "generated_at": result["generated_at"]
         }
 

@@ -32,17 +32,6 @@
             border-bottom: 1px solid var(--adm-border);
             backdrop-filter: blur(8px);
         }
-        .brand-pill {
-            border: 1px solid #c8deec;
-            background: var(--adm-blue-soft);
-            color: var(--adm-blue);
-            font-size: 0.72rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            border-radius: 999px;
-            padding: 0.22rem 0.55rem;
-            font-weight: 700;
-        }
         .panel {
             border-radius: 18px;
             border: 1px solid var(--adm-border);
@@ -127,10 +116,7 @@
     <div class="container">
         <a class="navbar-brand d-flex align-items-center fw-bold" href="{{ url_for('admin_dashboard') }}">
             <i class="bi bi-heart-pulse-fill text-primary me-2"></i>
-            <div>
-                <div>GutHealth</div>
-                <div class="brand-pill mt-1">Admin Console</div>
-            </div>
+            <div>GutHealth</div>
         </a>
         <div class="d-flex align-items-center gap-2">
             <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary btn-sm rounded-pill">Overview</a>
@@ -162,7 +148,6 @@
                 <h1 class="h3 fw-bold mb-1">Admin Overview</h1>
                 <p class="text-muted mb-0">Core admin controls are now split into dedicated pages.</p>
             </div>
-            <span class="badge text-bg-success px-3 py-2">Clean Dashboard</span>
         </div>
         <div class="row g-3">
             <div class="col-md-3">
@@ -213,7 +198,6 @@
     <div class="panel p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="fw-bold mb-0">Food PRAL Knowledge Base</h5>
-            <span class="badge text-bg-primary">Prediction Input</span>
         </div>
         <p class="small text-muted mb-3">Add or update PRAL scores used to auto-calculate meal acidity in Diet Checker.</p>
         <form action="{{ url_for('admin_add_pral') }}" method="POST" class="row g-2 align-items-end mb-3">
@@ -267,7 +251,6 @@
     <div class="panel p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="fw-bold mb-0">Recent Admin Activity</h5>
-            <span class="badge text-bg-warning text-dark">Security</span>
         </div>
         {% if audit_logs %}
         <div class="table-responsive">
