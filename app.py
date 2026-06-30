@@ -182,7 +182,10 @@ def delete_food_log(log_id):
     with get_db() as conn:
         conn.execute("DELETE FROM food_logs WHERE id = ? AND user_id = ?", (log_id, session["user_id"]))
     flash("Food log deleted.")
-    return redirect(url_for("diet_checker"))
+    next_url = request.form.get("next") or request.referrer
+    if next_url and next_url.startswith(request.host_url):
+        return redirect(next_url)
+    return redirect(url_for("food_history"))
 
 DB_PATH = "database.db"
 
@@ -407,6 +410,13 @@ REFERENCE_RISK_KEYWORDS = [
     "tomato", "citrus", "orange", "lemon", "coffee", "chocolate", "mint", "peppermint",
     "onion", "garlic", "soda", "carbonated", "alcohol",
 ]
+REFERENCE_AVOID_CONTEXT_KEYWORDS = [
+    "avoid", "trigger", "worsen", "heartburn", "reflux", "acidic", "irritat", "flare",
+    "not recommended", "limit", "reduce", "symptom",
+]
+REFERENCE_SAFE_CONTEXT_KEYWORDS = [
+    "safe", "tolerat", "gentle", "soothing", "recommended", "low acid", "bland", "better choice",
+]
 REFERENCE_FETCH_TIMEOUT_SECONDS = 3.0
 REFERENCE_CACHE_TTL_SECONDS = 60 * 60 * 24
 _reference_cache = {"expires_at": 0.0, "pages": {}}
@@ -455,22 +465,59 @@ def get_reference_risk_signal(food_name):
 
     matched_keywords = [kw for kw in REFERENCE_RISK_KEYWORDS if kw in normalized_food]
     matched_sources = []
+    avoid_context_hits = 0
+    safe_context_hits = 0
+
+    # Build a few simple aliases to improve matching for plural and phrasing variants.
+    aliases = {normalized_food}
+    food_parts = [part for part in normalized_food.split() if part]
+    if food_parts:
+        aliases.add(food_parts[-1])
+    if len(normalized_food) > 3 and normalized_food.endswith("s"):
+        aliases.add(normalized_food[:-1])
+
     for ref in DIET_GUIDANCE_REFERENCES:
         text = corpus.get(ref["url"], "")
         if not text:
             continue
         keyword_hit = any(kw in text for kw in matched_keywords)
-        food_hit = len(normalized_food) >= 4 and normalized_food in text
+        food_hit = any(len(alias) >= 3 and alias in text for alias in aliases)
         if keyword_hit or food_hit:
             matched_sources.append({"title": ref["title"], "url": ref["url"]})
 
+        if food_hit:
+            for alias in aliases:
+                if len(alias) < 3:
+                    continue
+                start = 0
+                while True:
+                    idx = text.find(alias, start)
+                    if idx == -1:
+                        break
+                    snippet = text[max(0, idx - 140): idx + len(alias) + 140]
+                    avoid_context_hits += sum(1 for kw in REFERENCE_AVOID_CONTEXT_KEYWORDS if kw in snippet)
+                    safe_context_hits += sum(1 for kw in REFERENCE_SAFE_CONTEXT_KEYWORDS if kw in snippet)
+                    start = idx + len(alias)
+
     detected = bool(matched_keywords) and bool(matched_sources)
+    traceable = bool(matched_sources)
     score_boost = min(0.8, 0.2 * len(matched_keywords)) if detected else 0.0
+
+    evidence_status = "unknown"
+    if avoid_context_hits >= (safe_context_hits + 2) and avoid_context_hits >= 2:
+        evidence_status = "avoid"
+    elif safe_context_hits >= (avoid_context_hits + 2) and safe_context_hits >= 2:
+        evidence_status = "safe"
+
     return {
         "detected": detected,
+        "traceable": traceable,
         "api_checked": api_checked,
         "matched_keywords": matched_keywords,
         "matched_sources": matched_sources,
+        "avoid_context_hits": int(avoid_context_hits),
+        "safe_context_hits": int(safe_context_hits),
+        "evidence_status": evidence_status,
         "score_boost": round(float(score_boost), 2),
     }
 
@@ -504,10 +551,10 @@ def infer_condition_rule_statuses(food_name, meal_pral, reference_detected=False
         }
 
     return {
-        "gastritis_status": "safe",
-        "gerd_status": "safe",
-        "hpylori_status": "safe",
-        "reason": "no strong trigger signal detected; treated as safe by default",
+        "gastritis_status": "unknown",
+        "gerd_status": "unknown",
+        "hpylori_status": "unknown",
+        "reason": "insufficient direct trigger/safety evidence for a confident classification",
     }
 
 
@@ -520,14 +567,19 @@ def classify_food_status(condition_value, food_name, meal_pral, db_rule_status=N
         base_status = normalized_rule
         base_reason = f"Condition rule marks this food as {normalized_rule}."
     else:
-        inferred = infer_condition_rule_statuses(
-            food_name=food_name,
-            meal_pral=meal_pral,
-            reference_detected=bool(reference_signal.get("detected")),
-        )
-        column = CONDITION_COLUMN_MAP.get(normalized_condition, "gastritis_status")
-        base_status = str(inferred.get(column) or "safe").strip().lower()
-        base_reason = inferred.get("reason") or "Inferred from food profile and reference signals."
+        evidence_status = str(reference_signal.get("evidence_status") or "").strip().lower()
+        if evidence_status in ("safe", "avoid"):
+            base_status = evidence_status
+            base_reason = "Reference-source food evidence indicates this classification."
+        else:
+            inferred = infer_condition_rule_statuses(
+                food_name=food_name,
+                meal_pral=meal_pral,
+                reference_detected=bool(reference_signal.get("detected")),
+            )
+            column = CONDITION_COLUMN_MAP.get(normalized_condition, "gastritis_status")
+            base_status = str(inferred.get(column) or "unknown").strip().lower()
+            base_reason = inferred.get("reason") or "Inferred from food profile and reference signals."
 
     # Source-backed trigger signals take precedence when available.
     if bool(reference_signal.get("detected")):
@@ -538,7 +590,10 @@ def classify_food_status(condition_value, food_name, meal_pral, db_rule_status=N
             "base_status": base_status,
         }
 
-    final_status = "safe" if base_status == "safe" else "avoid"
+    if base_status == "unknown":
+        final_status = "unknown"
+    else:
+        final_status = "safe" if base_status == "safe" else "avoid"
     return {
         "status": final_status,
         "reason": base_reason,
@@ -598,6 +653,9 @@ def estimate_pral_score(food_name, meal_type="Lunch"):
         "vegetable": -2.6,
         "tofu": -2.2,
         "fruit": -1.8,
+        "apple": -2.2,
+        "avocado": -1.5,
+        "fish": 1.4,
     }
 
     matched_scores = [value for keyword, value in keyword_scores.items() if keyword in normalized_food]
@@ -1023,6 +1081,58 @@ def assess_prediction_quality(food_name, pral_source, model_columns):
         "reason": "Food is not in trained vocabulary and PRAL is a fallback estimate."
     }
 
+
+def is_plausible_food_name(food_name):
+    normalized = normalize_food_name(food_name)
+    if normalized == "unknown food":
+        return False
+    if len(normalized) < 3:
+        return False
+    if not re.fullmatch(r"[a-z\s\-']+", normalized):
+        return False
+    words = [w for w in normalized.split() if w]
+    if len(words) > 5:
+        return False
+    if not any(ch in "aeiou" for ch in normalized):
+        return False
+    return True
+
+
+def has_food_signal(food_name):
+    normalized = normalize_food_name(food_name)
+    risk_tokens = {
+        "fried", "spicy", "pepper", "tomato", "citrus", "orange", "lemon", "coffee",
+        "chocolate", "mint", "onion", "garlic", "soda", "alcohol", "pizza", "burger",
+    }
+    safe_tokens = {
+        "banana", "oat", "oatmeal", "salad", "vegetable", "lentil", "bean", "tofu",
+        "apple", "avocado", "fish", "salmon", "chicken", "rice", "broccoli", "spinach",
+        "carrot", "potato", "egg", "eggs", "yogurt", "milk", "bread", "pasta", "pear",
+        "mango", "soup",
+    }
+    return any(token in normalized for token in risk_tokens.union(safe_tokens))
+
+
+def should_mark_unknown_for_unseen_food(*, food_name, has_db_rule, has_pending_rule, quality_info, reference_signal):
+    if has_db_rule:
+        return False
+    if has_pending_rule:
+        return False
+    if bool((reference_signal or {}).get("traceable")):
+        return False
+    if bool((reference_signal or {}).get("detected")):
+        return False
+
+    # Do not auto-mark unknown if the food name is plausible and we can extract known food signals.
+    if is_plausible_food_name(food_name) and has_food_signal(food_name):
+        return False
+
+    # For plausible-but-unmapped names, use unknown only when model quality is also uncertain.
+    if is_plausible_food_name(food_name):
+        return bool((quality_info or {}).get("is_uncertain"))
+
+    return bool((quality_info or {}).get("is_uncertain"))
+
 # ---------------------------------------------------
 # DATABASE CONNECTION
 # ---------------------------------------------------
@@ -1442,8 +1552,15 @@ def check():
 
     with get_db() as conn:
         row = conn.execute(f"SELECT food_name, {column} AS status FROM food_rules WHERE LOWER(food_name) = ?", (food_query,)).fetchone()
-        inferred_pral, _ = estimate_pral_score(food_input)
+        pending_row = conn.execute(
+            f"SELECT food_name, {column} AS status, reason "
+            f"FROM pending_food_rules "
+            f"WHERE LOWER(food_name) = ? AND LOWER(COALESCE(status, '')) = 'pending'",
+            (food_query,),
+        ).fetchone()
+        inferred_pral, pral_source = estimate_pral_score(food_input)
         reference_signal = get_reference_risk_signal(food_input)
+        quality_info = assess_prediction_quality(normalize_food_name(food_input), pral_source, model_columns)
 
         if row:
             res_food = row["food_name"]
@@ -1457,51 +1574,101 @@ def check():
             res_status = final_status["status"]
         else:
             res_food = food_input
+            provisional_status = classify_food_status(
+                condition_value=condition,
+                food_name=res_food,
+                meal_pral=inferred_pral,
+                db_rule_status=None,
+                reference_signal=reference_signal,
+            )
+            mark_unknown = should_mark_unknown_for_unseen_food(
+                food_name=res_food,
+                has_db_rule=False,
+                has_pending_rule=bool(pending_row),
+                quality_info=quality_info,
+                reference_signal=reference_signal,
+            )
 
             inferred = infer_condition_rule_statuses(
                 food_name=res_food,
                 meal_pral=inferred_pral,
                 reference_detected=reference_signal["detected"],
             )
-            conn.execute(
-                "INSERT INTO pending_food_rules (food_name, gastritis_status, gerd_status, hpylori_status, suggested_by_user_id, reason, source_signals, status, updated_at, reviewed_by_user_id, reviewed_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP, NULL, NULL) "
-                "ON CONFLICT(food_name) DO UPDATE SET "
-                "gastritis_status = excluded.gastritis_status, "
-                "gerd_status = excluded.gerd_status, "
-                "hpylori_status = excluded.hpylori_status, "
-                "suggested_by_user_id = excluded.suggested_by_user_id, "
-                "reason = excluded.reason, "
-                "source_signals = excluded.source_signals, "
-                "status = 'pending', "
-                "updated_at = CURRENT_TIMESTAMP, "
-                "reviewed_by_user_id = NULL, "
-                "reviewed_at = NULL",
-                (
-                    res_food,
-                    inferred["gastritis_status"],
-                    inferred["gerd_status"],
-                    inferred["hpylori_status"],
-                    session["user_id"],
-                    inferred["reason"],
-                    ", ".join(reference_signal["matched_keywords"][:10]),
-                ),
-            )
+            pending_status = "rejected" if mark_unknown else "pending"
+            pending_reason = inferred["reason"]
+            if mark_unknown:
+                pending_reason = "Auto-rejected: low-confidence food name (likely misspelling or unknown item)."
+            if not pending_row:
+                conn.execute(
+                    "INSERT INTO pending_food_rules (food_name, gastritis_status, gerd_status, hpylori_status, suggested_by_user_id, reason, source_signals, status, updated_at, reviewed_by_user_id, reviewed_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, NULL) "
+                    "ON CONFLICT(food_name) DO UPDATE SET "
+                    "gastritis_status = excluded.gastritis_status, "
+                    "gerd_status = excluded.gerd_status, "
+                    "hpylori_status = excluded.hpylori_status, "
+                    "suggested_by_user_id = excluded.suggested_by_user_id, "
+                    "reason = excluded.reason, "
+                    "source_signals = excluded.source_signals, "
+                    "status = excluded.status, "
+                    "updated_at = CURRENT_TIMESTAMP, "
+                    "reviewed_by_user_id = NULL, "
+                    "reviewed_at = NULL",
+                    (
+                        res_food,
+                        inferred["gastritis_status"],
+                        inferred["gerd_status"],
+                        inferred["hpylori_status"],
+                        session["user_id"],
+                        pending_reason,
+                        ", ".join(reference_signal["matched_keywords"][:10]),
+                        pending_status,
+                    ),
+                )
 
-            res_status = inferred.get(column, "safe")
-            flash(
-                f"Saved '{res_food}' as a pending rule suggestion ({res_status}). "
-                f"Admin approval is required before it becomes active."
-            )
+            if mark_unknown:
+                res_status = "unknown"
+                flash(
+                    f"'{res_food}' could not be recognized confidently and was auto-rejected for rule creation. "
+                    f"Please check spelling or use a more specific food name."
+                )
+            else:
+                if pending_row and str(pending_row["status"] or "").strip().lower() in ("safe", "avoid"):
+                    res_status = str(pending_row["status"]).strip().lower()
+                else:
+                    res_status = provisional_status["status"]
+                flash(
+                    f"Instant feedback: '{res_food}' is provisionally {res_status}. "
+                    f"A rule suggestion was also submitted for admin review."
+                )
 
         final_status = classify_food_status(
             condition_value=condition,
             food_name=res_food,
             meal_pral=inferred_pral,
-            db_rule_status=(row["status"] if row else None),
+            db_rule_status=(row["status"] if row else (pending_row["status"] if pending_row else None)),
             reference_signal=reference_signal,
         )
+
+        quality_info = assess_prediction_quality(normalize_food_name(res_food), pral_source, model_columns)
+        if should_mark_unknown_for_unseen_food(
+            food_name=res_food,
+            has_db_rule=bool(row),
+            has_pending_rule=bool(pending_row),
+            quality_info=quality_info,
+            reference_signal=reference_signal,
+        ):
+            final_status = {
+                "status": "unknown",
+                "reason": "This food is not recognized with enough confidence yet. We cannot provide a safety recommendation.",
+                "source": "low_confidence_unknown",
+                "base_status": final_status.get("base_status", "safe"),
+            }
+
         res_status = final_status["status"]
+        if (row is None) and (res_status == "unknown"):
+            flash(
+                f"'{res_food}' is not recognized yet. We cannot determine safety until admin review approves a rule."
+            )
         if final_status["source"] == "reference_override":
             flash("Reference API override applied: source-backed trigger risk detected.")
 
@@ -1589,20 +1756,45 @@ def predict_risk():
                 f"SELECT {condition_column} AS status FROM food_rules WHERE LOWER(food_name) = ?",
                 (food_name,)
             ).fetchone()
+            pending_rule_row = conn.execute(
+                f"SELECT {condition_column} AS status, reason FROM pending_food_rules "
+                f"WHERE LOWER(food_name) = ? AND LOWER(COALESCE(status, '')) = 'pending'",
+                (food_name,)
+            ).fetchone()
 
         final_status = classify_food_status(
             condition_value=condition_value,
             food_name=food_name,
             meal_pral=meal_pral,
-            db_rule_status=(food_rule_row["status"] if food_rule_row else None),
+            db_rule_status=(food_rule_row["status"] if food_rule_row else (pending_rule_row["status"] if pending_rule_row else None)),
             reference_signal=reference_signal,
         )
+
+        if should_mark_unknown_for_unseen_food(
+            food_name=food_name,
+            has_db_rule=bool(food_rule_row),
+            has_pending_rule=bool(pending_rule_row),
+            quality_info=quality_info,
+            reference_signal=reference_signal,
+        ):
+            final_status = {
+                "status": "unknown",
+                "reason": "This food is not recognized with enough confidence yet. We cannot provide a safety recommendation.",
+                "source": "low_confidence_unknown",
+                "base_status": final_status.get("base_status", "safe"),
+            }
 
         if final_status["status"] == "avoid":
             result["recommendation"] = "Unsafe to Consume"
             result["recommendation_reason"] = final_status["reason"]
             if result["level"] == "low":
                 result["message"] = "Model flare score is low, but rule/source signals classify this food as unsafe for your condition."
+        elif final_status["status"] == "unknown":
+            result["recommendation"] = "Cannot Determine Safety"
+            result["recommendation_reason"] = (
+                "This food is not recognized with enough confidence. No safety recommendation will be made until it is reviewed."
+            )
+            result["message"] = "We could not confidently classify this food."
         else:
             result["recommendation"] = "Safe to Consume"
             result["recommendation_reason"] = final_status["reason"]
@@ -1645,6 +1837,9 @@ def predict_risk():
             )
         else:
             result["alternatives"] = []
+
+        if final_status["status"] == "unknown":
+            result["uncertainty_reason"] = "Food not recognized in approved rules or reliable model vocabulary."
 
         with get_db() as conn:
             last_row = conn.execute(

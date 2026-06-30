@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Rule Management</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gh-unified.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --adm-ink: #163349;
+            --adm-blue: #1f5f8f;
+            --adm-border: #d7e6ef;
+            --adm-bg: #f5fbff;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--adm-ink);
+            min-height: 100vh;
+            background:
+                radial-gradient(56rem 24rem at -10% -8%, #c9e8f8 0%, transparent 55%),
+                radial-gradient(40rem 20rem at 105% 0%, #d9f3e6 0%, transparent 55%),
+                linear-gradient(180deg, #fbfeff 0%, var(--adm-bg) 100%);
+        }
+        .admin-nav {
+            background: rgba(255, 255, 255, 0.88);
+            border-bottom: 1px solid var(--adm-border);
+            backdrop-filter: blur(8px);
+        }
+        .panel {
+            border-radius: 18px;
+            border: 1px solid var(--adm-border);
+            box-shadow: 0 14px 28px rgba(20, 70, 104, 0.08);
+            background: rgba(255, 255, 255, 0.95);
+            margin-bottom: 18px;
+        }
+        .flash-note {
+            border-radius: 12px;
+            border: 1px solid #cae3ef;
+            background: #edf8fd;
+            color: #184765;
+        }
+        .user-name {
+            font-weight: 700;
+            color: #17354c;
+        }
+        .user-email {
+            font-size: 0.82rem;
+            color: #5b7385;
+        }
+        .table thead th {
+            color: #4e6677;
+            text-transform: uppercase;
+            font-size: 0.76rem;
+            letter-spacing: 0.04em;
+            border-bottom-width: 1px;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-light admin-nav py-3 mb-4 shadow-sm">
+    <div class="container">
+        <a class="navbar-brand d-flex align-items-center fw-bold" href="{{ url_for('admin_dashboard') }}">
+            <i class="bi bi-heart-pulse-fill text-primary me-2"></i>
+            <div>GutHealth</div>
+        </a>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-primary btn-sm rounded-pill">Overview</a>
+            <a href="{{ url_for('admin_model_performance') }}" class="btn btn-outline-primary btn-sm rounded-pill">Model Performance</a>
+            <a href="{{ url_for('admin_rule_management') }}" class="btn btn-primary btn-sm rounded-pill">Rules</a>
+            <a href="{{ url_for('admin_user_management') }}" class="btn btn-outline-primary btn-sm rounded-pill">User Management</a>
+            <a href="{{ url_for('logout_page') }}" class="btn btn-outline-danger btn-sm rounded-pill">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container" style="max-width: 1100px;">
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="mb-3">
+        {% for message in messages %}
+        <div class="alert flash-note mb-2" role="alert">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+            <div>
+                <h1 class="h3 fw-bold mb-1">Rule Management</h1>
+                <p class="text-muted mb-0">Review pending food rules, approve/reject submissions, and undo approvals.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Pending Rule Suggestions</h5>
+        </div>
+        <p class="small text-muted mb-3">Unknown foods from user checks are queued here for admin review before becoming active condition rules.</p>
+        {% if pending_rules %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Food</th>
+                        <th>Gastritis</th>
+                        <th>GERD</th>
+                        <th>H. pylori</th>
+                        <th>Reason</th>
+                        <th>Signals</th>
+                        <th>Suggested By</th>
+                        <th>Updated</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pending_rules %}
+                    <tr>
+                        <td class="user-name">{{ item.food_name }}</td>
+                        <td>{{ item.gastritis_status }}</td>
+                        <td>{{ item.gerd_status }}</td>
+                        <td>{{ item.hpylori_status }}</td>
+                        <td class="user-email">{{ item.reason }}</td>
+                        <td class="user-email">{{ item.source_signals or 'N/A' }}</td>
+                        <td>{{ item.suggested_by_name or 'Unknown' }}</td>
+                        <td class="user-email">{{ item.updated_at }}</td>
+                        <td class="text-end">
+                            <div class="d-inline-flex gap-2">
+                                <form action="{{ url_for('admin_approve_pending_rule', entry_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Approve this rule suggestion?');">
+                                    <button type="submit" class="btn btn-outline-success btn-sm">Approve</button>
+                                </form>
+                                <form action="{{ url_for('admin_reject_pending_rule', entry_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Reject this rule suggestion?');">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">Reject</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No pending rule suggestions right now.</p>
+        {% endif %}
+    </div>
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Approved Rule Actions</h5>
+        </div>
+        <p class="small text-muted mb-3">Undo an approval to move a rule suggestion back to pending review.</p>
+        {% if approved_rules %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Food</th>
+                        <th>Gastritis</th>
+                        <th>GERD</th>
+                        <th>H. pylori</th>
+                        <th>Reason</th>
+                        <th>Reviewed By</th>
+                        <th>Updated</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in approved_rules %}
+                    <tr>
+                        <td class="user-name">{{ item.food_name }}</td>
+                        <td>{{ item.gastritis_status }}</td>
+                        <td>{{ item.gerd_status }}</td>
+                        <td>{{ item.hpylori_status }}</td>
+                        <td class="user-email">{{ item.reason }}</td>
+                        <td>{{ item.reviewed_by_name or 'Unknown' }}</td>
+                        <td class="user-email">{{ item.updated_at }}</td>
+                        <td class="text-end">
+                            <form action="{{ url_for('admin_undo_approved_rule', entry_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Undo this approval and move it back to pending?');">
+                                <button type="submit" class="btn btn-outline-warning btn-sm">Undo Approve</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No approved rule suggestions available to undo.</p>
+        {% endif %}
+    </div>
+</div>
+
+</body>
+</html>

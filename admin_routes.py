@@ -28,14 +28,26 @@ def register_admin_routes(
             admin_users = conn.execute(
                 "SELECT id, name, email, condition, is_admin, is_active FROM users ORDER BY is_admin DESC, id DESC"
             ).fetchall()
-            pral_entries = conn.execute(
-                "SELECT id, food_name, pral_score, source, updated_at FROM food_pral ORDER BY LOWER(food_name) ASC"
-            ).fetchall()
             audit_logs = conn.execute(
                 "SELECT a.created_at, a.action_type, a.target, a.details, u.name AS admin_name "
                 "FROM admin_audit_logs a LEFT JOIN users u ON u.id = a.admin_user_id "
                 "ORDER BY a.id DESC LIMIT 25"
             ).fetchall()
+
+        return render_template(
+            "admin.html",
+            model_test_results=model_test_results,
+            admin_users=admin_users,
+            audit_logs=audit_logs,
+        )
+
+    @app.route("/admin/rules")
+    def admin_rule_management():
+        guard = require_admin()
+        if guard:
+            return guard
+
+        with get_db() as conn:
             pending_rules = conn.execute(
                 "SELECT p.id, p.food_name, p.gastritis_status, p.gerd_status, p.hpylori_status, "
                 "p.reason, p.source_signals, p.created_at, p.updated_at, u.name AS suggested_by_name "
@@ -44,14 +56,19 @@ def register_admin_routes(
                 "WHERE LOWER(COALESCE(p.status, 'pending')) = 'pending' "
                 "ORDER BY p.updated_at DESC, p.id DESC LIMIT 60"
             ).fetchall()
+            approved_rules = conn.execute(
+                "SELECT p.id, p.food_name, p.gastritis_status, p.gerd_status, p.hpylori_status, "
+                "p.reason, p.updated_at, u.name AS reviewed_by_name "
+                "FROM pending_food_rules p "
+                "LEFT JOIN users u ON u.id = p.reviewed_by_user_id "
+                "WHERE LOWER(COALESCE(p.status, '')) = 'approved' "
+                "ORDER BY p.updated_at DESC, p.id DESC LIMIT 40"
+            ).fetchall()
 
         return render_template(
-            "admin.html",
-            model_test_results=model_test_results,
-            admin_users=admin_users,
-            pral_entries=pral_entries,
-            audit_logs=audit_logs,
+            "admin_rules.html",
             pending_rules=pending_rules,
+            approved_rules=approved_rules,
         )
 
     @app.route("/admin/rules/<int:entry_id>/approve", methods=["POST"])
@@ -95,7 +112,7 @@ def register_admin_routes(
             f"g={entry['gastritis_status']}, ge={entry['gerd_status']}, hp={entry['hpylori_status']}, reason={entry['reason']}",
         )
         flash("Pending rule approved and added to active condition rules.")
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_rule_management"))
 
     @app.route("/admin/rules/<int:entry_id>/reject", methods=["POST"])
     def admin_reject_pending_rule(entry_id):
@@ -119,7 +136,53 @@ def register_admin_routes(
 
         log_admin_action("rule_reject", entry["food_name"], f"reason={entry['reason']}")
         flash("Pending rule rejected.")
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_rule_management"))
+
+    @app.route("/admin/rules/<int:entry_id>/undo-approve", methods=["POST"])
+    def admin_undo_approved_rule(entry_id):
+        guard = require_admin()
+        if guard:
+            return guard
+
+        with get_db() as conn:
+            entry = conn.execute(
+                "SELECT id, food_name, gastritis_status, gerd_status, hpylori_status, reason, status "
+                "FROM pending_food_rules WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+            if not entry:
+                flash("Approved rule not found.")
+                return redirect(url_for("admin_dashboard"))
+
+            if str(entry["status"] or "").strip().lower() != "approved":
+                flash("Only approved rules can be undone.")
+                return redirect(url_for("admin_dashboard"))
+
+            active_rule = conn.execute(
+                "SELECT food_name, gastritis_status, gerd_status, hpylori_status FROM food_rules WHERE LOWER(food_name) = LOWER(?)",
+                (entry["food_name"],),
+            ).fetchone()
+
+            if active_rule:
+                statuses_match = (
+                    str(active_rule["gastritis_status"] or "").strip().lower() == str(entry["gastritis_status"] or "").strip().lower()
+                    and str(active_rule["gerd_status"] or "").strip().lower() == str(entry["gerd_status"] or "").strip().lower()
+                    and str(active_rule["hpylori_status"] or "").strip().lower() == str(entry["hpylori_status"] or "").strip().lower()
+                )
+                if statuses_match:
+                    conn.execute(
+                        "DELETE FROM food_rules WHERE LOWER(food_name) = LOWER(?)",
+                        (entry["food_name"],),
+                    )
+
+            conn.execute(
+                "UPDATE pending_food_rules SET status = 'pending', reviewed_by_user_id = NULL, reviewed_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (entry_id,),
+            )
+
+        log_admin_action("rule_undo_approve", entry["food_name"], f"reason={entry['reason']}")
+        flash("Approved rule has been moved back to pending review.")
+        return redirect(url_for("admin_rule_management"))
 
     @app.route("/admin/model-performance")
     def admin_model_performance():
@@ -259,4 +322,50 @@ def register_admin_routes(
         log_admin_action(action, target["email"], f"target_name={target['name']}")
 
         flash("User status updated.")
+        return redirect(url_for("admin_user_management"))
+
+    @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+    def admin_delete_user(user_id):
+        guard = require_admin()
+        if guard:
+            return guard
+
+        current_admin_id = session["user_id"]
+        with get_db() as conn:
+            target = conn.execute(
+                "SELECT id, name, email, is_admin FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            if not target:
+                flash("User not found.")
+                return redirect(url_for("admin_user_management"))
+
+            if target["id"] == current_admin_id:
+                flash("You cannot delete your own account while logged in.")
+                return redirect(url_for("admin_user_management"))
+
+            if target["is_admin"]:
+                admin_count_row = conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM users WHERE is_admin = 1"
+                ).fetchone()
+                admin_count = int(admin_count_row["cnt"] or 0)
+                if admin_count <= 1:
+                    flash("Cannot delete the last remaining admin account.")
+                    return redirect(url_for("admin_user_management"))
+
+            conn.execute("DELETE FROM medications WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM symptoms WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM food_logs WHERE user_id = ?", (user_id,))
+            conn.execute(
+                "DELETE FROM pending_food_rules WHERE suggested_by_user_id = ? OR reviewed_by_user_id = ?",
+                (user_id, user_id),
+            )
+            conn.execute(
+                "DELETE FROM admin_audit_logs WHERE admin_user_id = ?",
+                (user_id,),
+            )
+            conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+        log_admin_action("user_delete", target["email"], f"target_name={target['name']}")
+        flash("User account deleted.")
         return redirect(url_for("admin_user_management"))

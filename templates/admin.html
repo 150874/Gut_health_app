@@ -122,6 +122,7 @@
         <div class="d-flex align-items-center gap-2">
             <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary btn-sm rounded-pill">Overview</a>
             <a href="{{ url_for('admin_model_performance') }}" class="btn btn-outline-primary btn-sm rounded-pill">Model Performance</a>
+            <a href="{{ url_for('admin_rule_management') }}" class="btn btn-outline-primary btn-sm rounded-pill">Rules</a>
             <a href="{{ url_for('admin_user_management') }}" class="btn btn-outline-primary btn-sm rounded-pill">User Management</a>
             <a href="{{ url_for('logout_page') }}" class="btn btn-outline-danger btn-sm rounded-pill">Logout</a>
         </div>
@@ -181,71 +182,24 @@
     <div class="panel p-4">
         <h5 class="fw-bold mb-3">Quick Access</h5>
         <div class="row g-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <a href="{{ url_for('admin_model_performance') }}" class="quick-link">
                     <div class="title"><i class="bi bi-graph-up-arrow me-2"></i>Model Performance</div>
                     <div class="small text-muted mt-1">Charts, metrics, feature importance, and training history.</div>
                 </a>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
+                <a href="{{ url_for('admin_rule_management') }}" class="quick-link">
+                    <div class="title"><i class="bi bi-diagram-3 me-2"></i>Rule Management</div>
+                    <div class="small text-muted mt-1">Review pending food rules, approve or reject, and undo approvals.</div>
+                </a>
+            </div>
+            <div class="col-md-4">
                 <a href="{{ url_for('admin_user_management') }}" class="quick-link">
                     <div class="title"><i class="bi bi-people me-2"></i>User Management</div>
                     <div class="small text-muted mt-1">Promote, demote, activate/deactivate, and filter users.</div>
                 </a>
             </div>
-        </div>
-    </div>
-
-    <div class="panel p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0">Food PRAL Knowledge Base</h5>
-        </div>
-        <p class="small text-muted mb-3">Add or update PRAL scores used to auto-calculate meal acidity in Diet Checker.</p>
-        <form action="{{ url_for('admin_add_pral') }}" method="POST" class="row g-2 align-items-end mb-3">
-            <div class="col-md-6">
-                <label class="filter-label" for="pralFoodName">Food Name</label>
-                <input id="pralFoodName" name="food_name" class="form-control filter-input" placeholder="e.g. Chicken Soup" required>
-            </div>
-            <div class="col-md-4">
-                <label class="filter-label" for="pralScore">PRAL Score</label>
-                <input id="pralScore" name="pral_score" type="number" step="0.1" class="form-control filter-input" placeholder="e.g. 2.5" required>
-            </div>
-            <div class="col-md-2 d-grid">
-                <button type="submit" class="btn btn-outline-primary">Save Entry</button>
-            </div>
-        </form>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Food</th>
-                        <th>PRAL</th>
-                        <th>Source</th>
-                        <th>Updated</th>
-                        <th class="text-end">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for entry in pral_entries %}
-                    <tr>
-                        <td class="user-name">{{ entry.food_name }}</td>
-                        <td>{{ entry.pral_score }}</td>
-                        <td>{{ entry.source }}</td>
-                        <td class="user-email">{{ entry.updated_at }}</td>
-                        <td class="text-end">
-                            <form action="{{ url_for('admin_delete_pral', entry_id=entry.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this PRAL entry?');">
-                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% if not pral_entries %}
-                    <tr>
-                        <td colspan="5" class="text-center text-muted py-4">No PRAL entries yet.</td>
-                    </tr>
-                    {% endif %}
-                </tbody>
-            </table>
         </div>
     </div>
 
@@ -283,57 +237,6 @@
         {% endif %}
     </div>
 
-    <div class="panel p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0">Pending Rule Suggestions</h5>
-        </div>
-        <p class="small text-muted mb-3">Unknown foods from user checks are queued here for admin review before becoming active condition rules.</p>
-        {% if pending_rules %}
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Food</th>
-                        <th>Gastritis</th>
-                        <th>GERD</th>
-                        <th>H. pylori</th>
-                        <th>Reason</th>
-                        <th>Signals</th>
-                        <th>Suggested By</th>
-                        <th>Updated</th>
-                        <th class="text-end">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in pending_rules %}
-                    <tr>
-                        <td class="user-name">{{ item.food_name }}</td>
-                        <td>{{ item.gastritis_status }}</td>
-                        <td>{{ item.gerd_status }}</td>
-                        <td>{{ item.hpylori_status }}</td>
-                        <td class="user-email">{{ item.reason }}</td>
-                        <td class="user-email">{{ item.source_signals or 'N/A' }}</td>
-                        <td>{{ item.suggested_by_name or 'Unknown' }}</td>
-                        <td class="user-email">{{ item.updated_at }}</td>
-                        <td class="text-end">
-                            <div class="d-inline-flex gap-2">
-                                <form action="{{ url_for('admin_approve_pending_rule', entry_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Approve this rule suggestion?');">
-                                    <button type="submit" class="btn btn-outline-success btn-sm">Approve</button>
-                                </form>
-                                <form action="{{ url_for('admin_reject_pending_rule', entry_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Reject this rule suggestion?');">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm">Reject</button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-muted mb-0">No pending rule suggestions right now.</p>
-        {% endif %}
-    </div>
 </div>
 
 </body>

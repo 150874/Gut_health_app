@@ -54,6 +54,11 @@
             margin-top: 12px;
             padding-bottom: 50px;
         }
+        .learn-more-bottom {
+            max-width: 700px;
+            margin: 0.45rem auto 0;
+            padding-bottom: 18px;
+        }
         .card {
             border-radius: 20px;
             border: 1px solid #dbeaf1;
@@ -507,8 +512,8 @@
                     <span class="text-capitalize">{{ food }}</span>: <strong>Unsafe to Consume</strong>
                     <div class="small mt-1">Not recommended for your {{ condition|capitalize }} condition.</div>
                 {% else %}
-                    <span class="text-capitalize">{{ food }}</span>: <strong>Unsafe to Consume</strong>
-                    <div class="small mt-1">No approved safe rule found yet, so this is treated as unsafe by default.</div>
+                    <span class="text-capitalize">{{ food }}</span>: <strong>Safety Unknown</strong>
+                    <div class="small mt-1">We cannot determine safety yet because this food is not recognized or not approved.</div>
                 {% endif %}
             </div>
         </div>
@@ -519,7 +524,7 @@
     </div>
 </div>
 
-<div id="learnMoreBottom" class="container container-box mt-4" {% if not prediction_result %}style="display:none;"{% endif %}>
+<div id="learnMoreBottom" class="container learn-more-bottom" {% if not prediction_result %}style="display:none;"{% endif %}>
     {% if prediction_result %}
     {% set refs = prediction_result.reference_sources if prediction_result and prediction_result.reference_sources else [
         {'title': 'Healthline - Acidic Foods', 'url': 'https://www.healthline.com/nutrition/acidic-foods'},
@@ -698,7 +703,16 @@
             if (!learnMoreBottom) {
                 return;
             }
-            learnMoreBottom.innerHTML = buildReferencesBlock(data, matchedRefsHtml, refsHtml);
+            const fallbackRefsHtml = [
+                { title: 'Healthline - Acidic Foods', url: defaultReferenceUrl },
+                { title: 'Healthline - Acid Foods to Avoid', url: defaultReferenceUrl2 },
+                { title: 'Healthline - GERD Foods to Avoid', url: defaultReferenceUrl3 },
+                { title: 'Healthline - High Stomach Acid Symptoms', url: defaultReferenceUrl4 },
+                { title: 'Healthline - Foods That Cause Heartburn', url: defaultReferenceUrl5 }
+            ].map((ref) => `<a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(ref.title)}</a>`).join(' | ');
+
+            const resolvedRefsHtml = (refsHtml && refsHtml.trim()) ? refsHtml : fallbackRefsHtml;
+            learnMoreBottom.innerHTML = buildReferencesBlock(data, matchedRefsHtml, resolvedRefsHtml);
             learnMoreBottom.style.display = 'block';
         }
 
