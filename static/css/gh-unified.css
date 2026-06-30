@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+    --gh-ink: #183449;
+    --gh-blue: #1f5f8f;
+    --gh-green: #1b8f64;
+    --gh-border: #d7e6ef;
+    --gh-panel: rgba(255, 255, 255, 0.94);
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    color: var(--gh-ink);
+    background:
+        radial-gradient(58rem 26rem at -10% -8%, #c8eaf9 0%, transparent 56%),
+        radial-gradient(48rem 22rem at 112% 6%, #dff6e8 0%, transparent 58%),
+        linear-gradient(180deg, #fbfeff 0%, #f4f9fc 100%);
+}
+
+.card,
+.panel {
+    border: 1px solid var(--gh-border);
+    border-radius: 18px;
+    background: var(--gh-panel);
+    box-shadow: 0 10px 24px rgba(20, 70, 104, 0.08);
+}
+
+.navbar,
+.header-nav,
+.admin-nav {
+    border-bottom: 1px solid var(--gh-border);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(8px);
+}
+
+.btn,
+.btn-nav {
+    border-radius: 12px;
+    font-weight: 700;
+}
+
+.btn-primary,
+.btn-primary-gh,
+.btn-save {
+    background-color: var(--gh-blue);
+    border-color: var(--gh-blue);
+}
+
+.btn-primary:hover,
+.btn-primary-gh:hover,
+.btn-save:hover {
+    background-color: #184f78;
+    border-color: #184f78;
+}
+
+.table thead th {
+    text-transform: uppercase;
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: #4f6a7c;
+}
+
+.form-control,
+.form-select {
+    border-radius: 10px;
+    border: 1px solid #cfe0eb;
+}

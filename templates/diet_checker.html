@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gh-unified.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
         :root {
@@ -281,6 +282,21 @@
             border-top: none;
             padding-top: 0;
         }
+        .source-box {
+            margin-top: 0.75rem;
+            border: 1px solid #d8e6f2;
+            border-radius: 12px;
+            background: #f7fbff;
+            padding: 0.65rem 0.75rem;
+        }
+        .source-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            color: #1d507a;
+            margin-bottom: 0.35rem;
+        }
         .chat-box {
             margin-top: 0.85rem;
             border: 1px solid #d8e7f0;
@@ -339,6 +355,7 @@
             <div class="brand-pill mt-1">Gut Health Companion</div>
         </div>
         <div class="ms-auto">
+            <a href="{{ url_for('food_history') }}" class="btn btn-outline-secondary btn-sm rounded-pill me-2">Food History</a>
             <a href="{{ url_for('profile') }}" class="btn btn-outline-primary btn-sm rounded-pill">Profile</a>
         </div>
     </div>
@@ -352,9 +369,6 @@
         </div>
         <p class="text-muted mb-4">
             <i class="bi bi-person-circle me-1"></i> Condition: <strong id="userCondition">{{ condition }}</strong>
-        </p>
-        <p class="text-muted small mb-3">
-            Profile used by AI: Age <strong>{{ user_profile.age }}</strong>, BMI <strong>{{ user_profile.bmi }}</strong>, H. pylori <strong>{{ user_profile.h_pylori_result }}</strong>
         </p>
         <div class="small text-muted mb-3">Quick flow: Enter food -> Predict Risk -> Follow Final Recommendation.</div>
         
@@ -389,38 +403,16 @@
                 </div>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label" for="pralScoreInput">
-                    <i class="bi bi-activity me-1"></i> Meal PRAL Score (auto-calculated)
-                </label>
-                <input type="number" step="0.1" class="form-control" id="pralScoreInput" placeholder="Auto" readonly>
-                <div class="small text-muted mt-1" id="pralHint">PRAL is now computed automatically from your food and knowledge base.</div>
-            </div>
-
             <button type="button" id="aiPredictBtn" class="btn btn-ai w-100 mb-3">
                 <i class="bi bi-magic"></i> Predict Flare-Up Risk
             </button>
 
-            <div id="aiResultBox" class="ai-box mb-3" data-initial-risk="{{ prediction_result.score if prediction_result else '' }}" data-initial-confidence="{{ prediction_result.confidence_percent if prediction_result else '' }}" {% if prediction_result %}style="display:block;"{% endif %}>
+            <div id="aiResultBox" class="ai-box mb-3" {% if prediction_result %}style="display:block;"{% endif %}>
                 {% if prediction_result %}
-                    {% set initial_level = prediction_result.level if prediction_result.level is defined and prediction_result.level else ('high' if prediction_result.score >= 7 else ('moderate' if prediction_result.score >= 4 else 'low')) %}
                     <i class="bi bi-stars"></i>
-                    <strong>{{ prediction_result.title }}</strong>
-                    <span class="risk-pill risk-pill-{{ initial_level }}">
-                        <i class="bi {% if initial_level == 'high' %}bi-traffic-cone{% elif initial_level == 'moderate' %}bi-exclamation-diamond{% elif initial_level == 'uncertain' %}bi-question-circle{% else %}bi-check-circle{% endif %}"></i>
-                        {{ initial_level }} Risk
-                    </span>
-                    Risk Score: {{ prediction_result.score }}/10<br>
-                    Confidence: {{ prediction_result.confidence_label or 'N/A' }} ({{ prediction_result.confidence_percent or 'N/A' }}%)<br>
-                    {% if prediction_result.decision_threshold is defined and prediction_result.decision_threshold is not none %}
-                    Flare threshold: {{ prediction_result.decision_threshold }} (high risk: {{ prediction_result.high_risk_threshold or 'N/A' }})<br>
-                    {% endif %}
-                    {{ prediction_result.message }}
-                    {% if prediction_result.uncertainty_reason %}
-                    <div class="small mt-1">Uncertainty note: {{ prediction_result.uncertainty_reason }}</div>
-                    {% endif %}
-                    {% if prediction_result.calibration_hint %}
-                    <div class="small mt-1">{{ prediction_result.calibration_hint }}</div>
+                    <strong>Condition Consumption Decision</strong>
+                    {% if prediction_result.condition_food_reason %}
+                    <div class="small mt-1">Condition safety note: {{ prediction_result.condition_food_reason }}</div>
                     {% endif %}
                     <div class="final-reco">
                         <div class="label">Final Recommendation</div>
@@ -429,33 +421,30 @@
                     </div>
                     <div class="viz-grid">
                         <div class="viz-card">
-                            <div class="label">Risk Gauge</div>
-                            <div class="value">{{ prediction_result.score }}/10</div>
-                            <div class="gh-progress"><div class="gh-progress-fill gh-progress-risk" style="width: 0%;"></div></div>
-                        </div>
-                        <div class="viz-card">
-                            <div class="label">Confidence</div>
-                            <div class="value">{{ prediction_result.confidence_percent or 0 }}%</div>
-                            <div class="gh-progress"><div class="gh-progress-fill gh-progress-confidence" style="width: 0%;"></div></div>
-                        </div>
-                        <div class="viz-card">
-                            <div class="label">Auto PRAL</div>
-                            <div class="value">{{ prediction_result.pral_score if prediction_result.pral_score is defined else 'N/A' }}</div>
-                            <div class="small text-muted">Source: {{ prediction_result.pral_source or 'unknown' }}</div>
-                        </div>
-                        <div class="viz-card">
-                            <div class="label">Condition Status</div>
+                            <div class="label">Meal Decision</div>
                             <div class="value">{{ prediction_result.recommendation or 'Use Caution' }}</div>
-                            <div class="small text-muted">Based on meal profile and condition context.</div>
+                            <div class="small text-muted">Based on your condition and this meal.</div>
                         </div>
                         <div class="viz-card">
-                            <div class="label">Recent Symptom Burden</div>
-                            <div class="value">{{ prediction_result.symptom_burden.burden_level|capitalize if prediction_result.symptom_burden else 'N/A' }}</div>
+                            <div class="label">Recent Symptoms</div>
+                            <div class="value">
+                                {% if prediction_result.symptom_burden %}
+                                    {% if prediction_result.symptom_burden.burden_level == 'high' %}
+                                    Symptoms have been active
+                                    {% elif prediction_result.symptom_burden.burden_level == 'moderate' %}
+                                    Some symptoms recently
+                                    {% else %}
+                                    Symptoms mostly calm
+                                    {% endif %}
+                                {% else %}
+                                No symptom history yet
+                                {% endif %}
+                            </div>
                             <div class="small text-muted">
                                 {% if prediction_result.symptom_burden %}
-                                7d: {{ prediction_result.symptom_burden.recent_count }} | Delta: {{ prediction_result.symptom_burden.trend_delta }}
+                                We used your recent symptom history to personalize this result.
                                 {% else %}
-                                No symptom context yet
+                                Add symptom logs to get more personalized guidance.
                                 {% endif %}
                             </div>
                         </div>
@@ -470,17 +459,21 @@
                         </ul>
                     </div>
                     {% endif %}
-                    {% if prediction_result.alternatives %}
+                    {% if prediction_result.recommendation == 'Unsafe to Consume' and prediction_result.alternatives %}
                     <div class="alt-box">
                         <div class="alt-title">Healthier Alternatives</div>
                         {% for item in prediction_result.alternatives %}
                         <div class="alt-item">
                             <strong>{{ item.food }}</strong>
-                            <div class="small">{{ item.reason }}{% if item.pral_score is not none %} (PRAL: {{ item.pral_score }}){% endif %}</div>
+                            <div class="small">Why this may help: {{ item.reason }}</div>
+                            {% if item.reference %}
+                            <div class="small text-muted">Learn more: <a href="{{ item.reference.url }}" target="_blank" rel="noopener noreferrer">{{ item.reference.title }}</a></div>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
                     {% endif %}
+
                     <div class="small mt-2 opacity-75">Generated at: {{ prediction_result.generated_at }}</div>
                 {% endif %}
             </div>
@@ -488,7 +481,7 @@
             <div id="mealChatBox" class="chat-box" {% if prediction_result %}style="display:block;"{% else %}style="display:none;"{% endif %}>
                 <div class="chat-title"><i class="bi bi-chat-dots me-1"></i>AI Meal Follow-up</div>
                 <div id="mealChatLog" class="chat-log">
-                    <div class="chat-msg"><strong>Coach:</strong> Ask about this meal, for example: "Why is risk high?" or "Give me safer alternatives".</div>
+                    <div class="chat-msg"><strong>Coach:</strong> Ask for specific swaps, for example: "Give me 3 alternatives without fish or dairy".</div>
                 </div>
                 <div class="input-group">
                     <input type="text" id="mealChatInput" class="form-control" placeholder="Ask about this specific meal...">
@@ -496,8 +489,8 @@
                 </div>
             </div>
 
-            <button type="submit" class="btn btn-primary-gh w-100 py-2">
-                <i class="bi bi-journal-plus"></i> Log Meal to History
+            <button type="submit" class="btn btn-outline-secondary w-100 py-2">
+                <i class="bi bi-shield-check"></i> Check Rule Status
             </button>
         </form>
 
@@ -514,110 +507,119 @@
                     <span class="text-capitalize">{{ food }}</span>: <strong>Unsafe to Consume</strong>
                     <div class="small mt-1">Not recommended for your {{ condition|capitalize }} condition.</div>
                 {% else %}
-                    <span class="text-capitalize">{{ food }}</span>: <strong>Needs Review</strong>
-                    <div class="small mt-1">This food is not in the condition rules yet. Use the AI risk score as guidance.</div>
+                    <span class="text-capitalize">{{ food }}</span>: <strong>Unsafe to Consume</strong>
+                    <div class="small mt-1">No approved safe rule found yet, so this is treated as unsafe by default.</div>
                 {% endif %}
             </div>
         </div>
         {% endif %}
         
-        <hr class="my-4">
-        
-        <h5 class="section-title mb-3"><i class="bi bi-clock-history me-1"></i>Recent Food Checks</h5>
-        {% if recent_logs %}
-            <ul class="list-group recent-list mt-2">
-                {% for log in recent_logs %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span class="fw-semibold">{{ log.food_name }}</span>
-                    <div class="d-flex align-items-center gap-2">
-                        <small class="text-muted"><i class="bi bi-calendar me-1"></i>{{ log.timestamp }}</small>
-                        <form action="/delete_food_log/{{ log.id }}" method="POST" style="margin:0;" onsubmit="return confirm('Delete this food log?');">
-                            <button type="submit" class="btn btn-outline-danger btn-sm px-2"><i class="bi bi-trash"></i></button>
-                        </form>
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p class="text-muted">No food history yet.</p>
-        {% endif %}
-        
+        <div class="small text-muted mt-3">Meals are auto-logged after each successful flare-up prediction. View all entries on the Food History page.</div>
+
     </div>
 </div>
 
+<div id="learnMoreBottom" class="container container-box mt-4" {% if not prediction_result %}style="display:none;"{% endif %}>
+    {% if prediction_result %}
+    {% set refs = prediction_result.reference_sources if prediction_result and prediction_result.reference_sources else [
+        {'title': 'Healthline - Acidic Foods', 'url': 'https://www.healthline.com/nutrition/acidic-foods'},
+        {'title': 'Healthline - Acid Foods to Avoid', 'url': 'https://www.healthline.com/health/acid-foods-to-avoid'},
+        {'title': 'Healthline - GERD Foods to Avoid', 'url': 'https://www.healthline.com/health/gerd/foods-to-avoid'},
+        {'title': 'Healthline - High Stomach Acid Symptoms', 'url': 'https://www.healthline.com/health/high-stomach-acid-symptoms'},
+        {'title': 'Healthline - Foods That Cause Heartburn', 'url': 'https://www.healthline.com/nutrition/foods-that-cause-heartburn'},
+        {'title': 'Healthline - GERD Overview', 'url': 'https://www.healthline.com/health/gerd'},
+        {'title': 'Healthline - How Strong Is Stomach Acid', 'url': 'https://www.healthline.com/health/how-strong-is-stomach-acid'},
+        {'title': 'Healthline - GERD Home Remedies', 'url': 'https://www.healthline.com/health/gerd/home-remedies'},
+        {'title': 'Healthline - GERD Diet Restrictions', 'url': 'https://www.healthline.com/health/gerd-acid-reflux/diet-restrictions'},
+        {'title': 'Rela Institute - Acidity Causes, Foods to Avoid, Remedies', 'url': 'https://www.relainstitute.com/articles/acidity-causes-foods-to-avoid-and-remedies/'},
+        {'title': 'Collins Dental Group - Food Acidity Chart', 'url': 'https://collinsdentalgroup.com.au/food-acidity-chart/'},
+        {'title': 'UCF Health - H. pylori Diet', 'url': 'https://ucfhealth.com/our-services/lifestyle-medicine/h-pylori-diet/'},
+        {'title': 'Everyday Health - Foods Not to Eat with H. pylori', 'url': 'https://www.everydayhealth.com/digestive-health/foods-not-to-eat-with-pylori-bacteria/'}
+    ] %}
+    <div class="source-box">
+        <div class="source-title">Learn More</div>
+        {% if prediction_result.reference_api_used %}
+        <div class="small mb-1">We checked trusted health sources for this meal.</div>
+        {% endif %}
+        {% if prediction_result.reference_matches %}
+        <div class="small mb-1">
+            Most relevant sources for this meal:
+            {% for ref in prediction_result.reference_matches %}
+            <a href="{{ ref.url }}" target="_blank" rel="noopener noreferrer">{{ ref.title }}</a>{% if not loop.last %} | {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="small">
+            More trusted reading:
+            {% for ref in refs %}
+            <a href="{{ ref.url }}" target="_blank" rel="noopener noreferrer">{{ ref.title }}</a>{% if not loop.last %} | {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
 <script>
-    async function lookupPral(foodName) {
-        if (!foodName) {
-            return null;
-        }
-        try {
-            const response = await fetch(`/api/pral-lookup?food=${encodeURIComponent(foodName)}`);
-            const data = await response.json();
-            if (typeof data.pral_score === 'number') {
-                return data.pral_score;
-            }
-            return null;
-        } catch (error) {
-            return null;
-        }
-    }
-
     const foodInput = document.getElementById('foodInput');
-    const pralInput = document.getElementById('pralScoreInput');
-    const pralHint = document.getElementById('pralHint');
+    const dietForm = document.getElementById('dietForm');
+    const aiPredictBtn = document.getElementById('aiPredictBtn');
 
-    foodInput.addEventListener('blur', async function() {
-        const foodName = foodInput.value.trim();
-        if (!foodName) {
-            pralInput.value = '';
-            pralHint.textContent = 'PRAL is now computed automatically from your food and knowledge base.';
-            return;
-        }
-        const lookedUp = await lookupPral(foodName);
-        if (lookedUp !== null && typeof lookedUp === 'number') {
-            pralInput.value = lookedUp;
-            pralHint.textContent = `Auto-calculated PRAL: ${lookedUp}`;
-        }
-    });
+    // Pressing Enter in the diet form predicts risk first instead of logging immediately.
+    if (dietForm && aiPredictBtn) {
+        dietForm.addEventListener('keydown', function(event) {
+            if (event.key !== 'Enter') {
+                return;
+            }
+
+            const target = event.target;
+            if (!target) {
+                return;
+            }
+
+            if (target.tagName === 'TEXTAREA' || target.id === 'mealChatInput') {
+                return;
+            }
+
+            event.preventDefault();
+            aiPredictBtn.click();
+        });
+    }
 
     foodInput.addEventListener('input', function() {
         if (foodInput.value.trim() !== '') {
             return;
         }
         const aiBox = document.getElementById('aiResultBox');
+        const learnMoreBottom = document.getElementById('learnMoreBottom');
         aiBox.style.display = 'none';
         aiBox.innerHTML = '';
+        if (learnMoreBottom) {
+            learnMoreBottom.style.display = 'none';
+            learnMoreBottom.innerHTML = '';
+        }
 
         const mealChatBox = document.getElementById('mealChatBox');
         const mealChatLog = document.getElementById('mealChatLog');
         mealChatBox.style.display = 'none';
-        mealChatLog.innerHTML = '<div class="chat-msg"><strong>Coach:</strong> Ask about this meal, for example: "Why is risk high?" or "Give me safer alternatives".</div>';
-
-        pralInput.value = '';
-        pralHint.textContent = 'PRAL is now computed automatically from your food and knowledge base.';
+        mealChatLog.innerHTML = '<div class="chat-msg"><strong>Coach:</strong> Ask for specific swaps, for example: "Give me 3 alternatives without fish or dairy".</div>';
     });
-
-    (function applyInitialDashboardBars() {
-        const initialRisk = Number(document.getElementById('aiResultBox').dataset.initialRisk || 0);
-        const initialConfidence = Number(document.getElementById('aiResultBox').dataset.initialConfidence || 0);
-        const bars = document.querySelectorAll('.viz-grid .gh-progress-fill');
-        if (bars.length >= 2) {
-            bars[0].style.width = `${Math.max(0, Math.min(100, Math.round(initialRisk * 10)))}%`;
-            bars[1].style.width = `${Math.max(0, Math.min(100, Math.round(initialConfidence)))}%`;
-        }
-    })();
 
     document.getElementById('aiPredictBtn').addEventListener('click', async function() {
         const aiBox = document.getElementById('aiResultBox');
         const foodName = document.getElementById('foodInput').value.trim();
-
-        function buildRiskPill(level) {
-            const normalized = (level === 'high' || level === 'moderate' || level === 'low' || level === 'uncertain') ? level : 'low';
-            const icon = normalized === 'high'
-                ? 'bi-traffic-cone'
-                : (normalized === 'moderate' ? 'bi-exclamation-diamond' : (normalized === 'uncertain' ? 'bi-question-circle' : 'bi-check-circle'));
-            return `<span class="risk-pill risk-pill-${normalized}"><i class="bi ${icon}"></i>${normalized} Risk</span>`;
-        }
+        const defaultReferenceUrl = 'https://www.healthline.com/nutrition/acidic-foods';
+        const defaultReferenceUrl2 = 'https://www.healthline.com/health/acid-foods-to-avoid';
+        const defaultReferenceUrl3 = 'https://www.healthline.com/health/gerd/foods-to-avoid';
+        const defaultReferenceUrl4 = 'https://www.healthline.com/health/high-stomach-acid-symptoms';
+        const defaultReferenceUrl5 = 'https://www.healthline.com/nutrition/foods-that-cause-heartburn';
+        const defaultReferenceUrl6 = 'https://www.healthline.com/health/gerd';
+        const defaultReferenceUrl7 = 'https://www.healthline.com/health/how-strong-is-stomach-acid';
+        const defaultReferenceUrl8 = 'https://www.healthline.com/health/gerd/home-remedies';
+        const defaultReferenceUrl9 = 'https://www.healthline.com/health/gerd-acid-reflux/diet-restrictions';
+        const defaultReferenceUrl10 = 'https://www.relainstitute.com/articles/acidity-causes-foods-to-avoid-and-remedies/';
+        const defaultReferenceUrl11 = 'https://collinsdentalgroup.com.au/food-acidity-chart/';
+        const defaultReferenceUrl12 = 'https://ucfhealth.com/our-services/lifestyle-medicine/h-pylori-diet/';
+        const defaultReferenceUrl13 = 'https://www.everydayhealth.com/digestive-health/foods-not-to-eat-with-pylori-bacteria/';
 
         function escapeHtml(value) {
             return String(value ?? '')
@@ -637,37 +639,27 @@
         }
 
         function buildDashboardBlock(data) {
-            const scoreValue = Number(data.flare_up_risk_score ?? 0);
-            const scorePct = Math.max(0, Math.min(100, Math.round(scoreValue * 10)));
-            const confidencePct = Math.max(0, Math.min(100, Number(data.confidence_percent ?? 0)));
             const symptomBurden = data.symptom_burden || {};
-            const symptomLabel = symptomBurden.burden_level ? String(symptomBurden.burden_level) : 'n/a';
-            const symptomStats = symptomBurden.recent_count !== undefined
-                ? `7d: ${escapeHtml(symptomBurden.recent_count)} | Delta: ${escapeHtml(symptomBurden.trend_delta ?? 0)}`
-                : 'No symptom context yet';
+            let symptomLabel = 'No symptom history yet';
+            let symptomStats = 'Add symptom logs to get more personalized guidance.';
+            if (symptomBurden && symptomBurden.burden_level) {
+                if (symptomBurden.burden_level === 'high') {
+                    symptomLabel = 'Symptoms have been active';
+                } else if (symptomBurden.burden_level === 'moderate') {
+                    symptomLabel = 'Some symptoms recently';
+                } else {
+                    symptomLabel = 'Symptoms mostly calm';
+                }
+                symptomStats = 'We used your recent symptom history to personalize this result.';
+            }
             return `<div class="viz-grid">
                 <div class="viz-card">
-                    <div class="label">Risk Gauge</div>
-                    <div class="value">${escapeHtml(scoreValue)}/10</div>
-                    <div class="gh-progress"><div class="gh-progress-fill gh-progress-risk" style="width:${scorePct}%;"></div></div>
-                </div>
-                <div class="viz-card">
-                    <div class="label">Confidence</div>
-                    <div class="value">${escapeHtml(confidencePct)}%</div>
-                    <div class="gh-progress"><div class="gh-progress-fill gh-progress-confidence" style="width:${confidencePct}%;"></div></div>
-                </div>
-                <div class="viz-card">
-                    <div class="label">Auto PRAL</div>
-                    <div class="value">${escapeHtml(data.pral_score ?? 'N/A')}</div>
-                    <div class="small text-muted">Source: ${escapeHtml(data.pral_source ?? 'unknown')}</div>
-                </div>
-                <div class="viz-card">
-                    <div class="label">Condition Status</div>
+                    <div class="label">Meal Decision</div>
                     <div class="value">${escapeHtml(data.recommendation ?? 'Use Caution')}</div>
-                    <div class="small text-muted">Based on meal profile and condition context.</div>
+                    <div class="small text-muted">Based on your condition and this meal.</div>
                 </div>
                 <div class="viz-card">
-                    <div class="label">Recent Symptom Burden</div>
+                    <div class="label">Recent Symptoms</div>
                     <div class="value">${escapeHtml(symptomLabel)}</div>
                     <div class="small text-muted">${symptomStats}</div>
                 </div>
@@ -679,10 +671,35 @@
                 return '';
             }
             const rows = alternatives.map((item) => {
-                const pralText = item.pral_score === null || item.pral_score === undefined ? '' : ` (PRAL: ${escapeHtml(item.pral_score)})`;
-                return `<div class="alt-item"><strong>${escapeHtml(item.food)}</strong><div class="small">${escapeHtml(item.reason)}${pralText}</div></div>`;
+                const referenceHtml = item.reference && item.reference.url
+                    ? `<div class="small text-muted">Learn more: <a href="${escapeHtml(item.reference.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.reference.title || item.reference.url)}</a></div>`
+                    : '';
+                return `<div class="alt-item"><strong>${escapeHtml(item.food)}</strong><div class="small">Why this may help: ${escapeHtml(item.reason)}</div>${referenceHtml}</div>`;
             }).join('');
             return `<div class="alt-box"><div class="alt-title">Healthier Alternatives</div>${rows}</div>`;
+        }
+
+        function renderAlternativesForUnsafe(data) {
+            const recommendation = String(data.recommendation || '').trim().toLowerCase();
+            if (recommendation !== 'unsafe to consume') {
+                return '';
+            }
+            return buildAlternativesBlock(data.alternatives);
+        }
+
+        function buildReferencesBlock(data, matchedRefsHtml, refsHtml) {
+            const apiCheck = data.reference_api_used ? '<div class="small mb-1">We checked trusted health sources for this meal.</div>' : '';
+            const matched = matchedRefsHtml ? `<div class="small mb-1">Most relevant sources for this meal: ${matchedRefsHtml}</div>` : '';
+            return `<div class="source-box"><div class="source-title">Learn More</div>${apiCheck}${matched}<div class="small">More trusted reading: ${refsHtml}</div></div>`;
+        }
+
+        function renderLearnMoreAtBottom(data, matchedRefsHtml, refsHtml) {
+            const learnMoreBottom = document.getElementById('learnMoreBottom');
+            if (!learnMoreBottom) {
+                return;
+            }
+            learnMoreBottom.innerHTML = buildReferencesBlock(data, matchedRefsHtml, refsHtml);
+            learnMoreBottom.style.display = 'block';
         }
 
         const mealChatBox = document.getElementById('mealChatBox');
@@ -755,9 +772,12 @@
                 aiBox.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Error: ${data.error}`;
                 aiBox.style.color = "#c62828";
                 aiBox.style.backgroundColor = "#f8d7da";
+                const learnMoreBottom = document.getElementById('learnMoreBottom');
+                if (learnMoreBottom) {
+                    learnMoreBottom.style.display = 'none';
+                    learnMoreBottom.innerHTML = '';
+                }
             } else {
-                const score = data.flare_up_risk_score;
-
                 // Style based on server-provided risk level
                 if (data.risk_level === 'high') {
                     aiBox.style.backgroundColor = "#ffebee";
@@ -767,19 +787,34 @@
                     aiBox.style.backgroundColor = "#fff8e1";
                     aiBox.style.color = "#f57f17";
                     aiBox.style.borderColor = "#ffe082";
-                } else if (data.risk_level === 'uncertain') {
-                    aiBox.style.backgroundColor = "#f3f6fa";
-                    aiBox.style.color = "#41576b";
-                    aiBox.style.borderColor = "#d0dbe6";
                 } else {
                     aiBox.style.backgroundColor = "#e8f5e9";
                     aiBox.style.color = "#2e7d32";
                     aiBox.style.borderColor = "#a5d6a7";
                 }
 
-                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>${escapeHtml(data.title)}</strong>${buildRiskPill(data.risk_level)} Risk Score: ${escapeHtml(score)}/10<br>Confidence: ${escapeHtml(data.confidence_label ?? 'N/A')} (${escapeHtml(data.confidence_percent ?? 'N/A')}%)<br>${data.decision_threshold !== undefined ? `Flare threshold: ${escapeHtml(data.decision_threshold)} (high risk: ${escapeHtml(data.high_risk_threshold ?? 'N/A')})<br>` : ''}${escapeHtml(data.message)}${data.uncertainty_reason ? `<div class="small mt-1">Uncertainty note: ${escapeHtml(data.uncertainty_reason)}</div>` : ''}${data.calibration_hint ? `<div class="small mt-1">${escapeHtml(data.calibration_hint)}</div>` : ''}<div class="final-reco"><div class="label">Final Recommendation</div><div class="value">${escapeHtml(data.recommendation ?? 'Use Caution')}</div><div class="reason">${escapeHtml(data.recommendation_reason ?? 'Review meal details and monitor symptoms after eating.')}</div></div>${buildDashboardBlock(data)}${buildWhyBlock(data.why_points)}${buildAlternativesBlock(data.alternatives)}<div class="small mt-2 opacity-75">Generated at: ${escapeHtml(data.generated_at)}</div>`;
-                pralInput.value = (data.pral_score ?? '').toString();
-                pralHint.textContent = `Auto-calculated PRAL: ${data.pral_score ?? 'N/A'} (${data.pral_source ?? 'unknown'})`;
+                const refs = Array.isArray(data.reference_sources) && data.reference_sources.length > 0
+                    ? data.reference_sources
+                    : [
+                        { title: 'Healthline - Acidic Foods', url: (data.reference_source_url || defaultReferenceUrl) },
+                        { title: 'Healthline - Acid Foods to Avoid', url: defaultReferenceUrl2 },
+                        { title: 'Healthline - GERD Foods to Avoid', url: defaultReferenceUrl3 },
+                        { title: 'Healthline - High Stomach Acid Symptoms', url: defaultReferenceUrl4 },
+                        { title: 'Healthline - Foods That Cause Heartburn', url: defaultReferenceUrl5 },
+                        { title: 'Healthline - GERD Overview', url: defaultReferenceUrl6 },
+                        { title: 'Healthline - How Strong Is Stomach Acid', url: defaultReferenceUrl7 },
+                        { title: 'Healthline - GERD Home Remedies', url: defaultReferenceUrl8 },
+                        { title: 'Healthline - GERD Diet Restrictions', url: defaultReferenceUrl9 },
+                        { title: 'Rela Institute - Acidity Causes, Foods to Avoid, Remedies', url: defaultReferenceUrl10 },
+                        { title: 'Collins Dental Group - Food Acidity Chart', url: defaultReferenceUrl11 },
+                        { title: 'UCF Health - H. pylori Diet', url: defaultReferenceUrl12 },
+                        { title: 'Everyday Health - Foods Not to Eat with H. pylori', url: defaultReferenceUrl13 }
+                    ];
+                const matchedRefs = Array.isArray(data.reference_matches) ? data.reference_matches : [];
+                const refsHtml = refs.map((ref) => `<a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(ref.title || ref.url)}</a>`).join(' | ');
+                const matchedRefsHtml = matchedRefs.map((ref) => `<a href="${escapeHtml(ref.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(ref.title || ref.url)}</a>`).join(' | ');
+                aiBox.innerHTML = `<i class="bi bi-stars"></i> <strong>Condition Consumption Decision</strong>${data.condition_food_reason ? `<div class="small mt-1">Condition safety note: ${escapeHtml(data.condition_food_reason)}</div>` : ''}<div class="final-reco"><div class="label">Final Recommendation</div><div class="value">${escapeHtml(data.recommendation ?? 'Use Caution')}</div><div class="reason">${escapeHtml(data.recommendation_reason ?? 'Review meal details and monitor symptoms after eating.')}</div></div>${buildDashboardBlock(data)}${buildWhyBlock(data.why_points)}${renderAlternativesForUnsafe(data)}<div class="small mt-2 opacity-75">Generated at: ${escapeHtml(data.generated_at)}</div>`;
+                renderLearnMoreAtBottom(data, matchedRefsHtml, refsHtml);
                 mealChatBox.style.display = 'block';
             }
         } catch (error) {

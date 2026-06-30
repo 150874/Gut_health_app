@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gh-unified.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
         :root {
@@ -279,6 +280,58 @@
         </div>
         {% else %}
         <p class="text-muted mb-0">No admin actions logged yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Pending Rule Suggestions</h5>
+        </div>
+        <p class="small text-muted mb-3">Unknown foods from user checks are queued here for admin review before becoming active condition rules.</p>
+        {% if pending_rules %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Food</th>
+                        <th>Gastritis</th>
+                        <th>GERD</th>
+                        <th>H. pylori</th>
+                        <th>Reason</th>
+                        <th>Signals</th>
+                        <th>Suggested By</th>
+                        <th>Updated</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pending_rules %}
+                    <tr>
+                        <td class="user-name">{{ item.food_name }}</td>
+                        <td>{{ item.gastritis_status }}</td>
+                        <td>{{ item.gerd_status }}</td>
+                        <td>{{ item.hpylori_status }}</td>
+                        <td class="user-email">{{ item.reason }}</td>
+                        <td class="user-email">{{ item.source_signals or 'N/A' }}</td>
+                        <td>{{ item.suggested_by_name or 'Unknown' }}</td>
+                        <td class="user-email">{{ item.updated_at }}</td>
+                        <td class="text-end">
+                            <div class="d-inline-flex gap-2">
+                                <form action="{{ url_for('admin_approve_pending_rule', entry_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Approve this rule suggestion?');">
+                                    <button type="submit" class="btn btn-outline-success btn-sm">Approve</button>
+                                </form>
+                                <form action="{{ url_for('admin_reject_pending_rule', entry_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Reject this rule suggestion?');">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">Reject</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No pending rule suggestions right now.</p>
         {% endif %}
     </div>
 </div>

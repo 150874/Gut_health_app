@@ -36,6 +36,14 @@ def register_admin_routes(
                 "FROM admin_audit_logs a LEFT JOIN users u ON u.id = a.admin_user_id "
                 "ORDER BY a.id DESC LIMIT 25"
             ).fetchall()
+            pending_rules = conn.execute(
+                "SELECT p.id, p.food_name, p.gastritis_status, p.gerd_status, p.hpylori_status, "
+                "p.reason, p.source_signals, p.created_at, p.updated_at, u.name AS suggested_by_name "
+                "FROM pending_food_rules p "
+                "LEFT JOIN users u ON u.id = p.suggested_by_user_id "
+                "WHERE LOWER(COALESCE(p.status, 'pending')) = 'pending' "
+                "ORDER BY p.updated_at DESC, p.id DESC LIMIT 60"
+            ).fetchall()
 
         return render_template(
             "admin.html",
@@ -43,7 +51,75 @@ def register_admin_routes(
             admin_users=admin_users,
             pral_entries=pral_entries,
             audit_logs=audit_logs,
+            pending_rules=pending_rules,
         )
+
+    @app.route("/admin/rules/<int:entry_id>/approve", methods=["POST"])
+    def admin_approve_pending_rule(entry_id):
+        guard = require_admin()
+        if guard:
+            return guard
+
+        with get_db() as conn:
+            entry = conn.execute(
+                "SELECT id, food_name, gastritis_status, gerd_status, hpylori_status, reason "
+                "FROM pending_food_rules WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+            if not entry:
+                flash("Pending rule not found.")
+                return redirect(url_for("admin_dashboard"))
+
+            conn.execute(
+                "INSERT INTO food_rules (food_name, gastritis_status, gerd_status, hpylori_status) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(food_name) DO UPDATE SET "
+                "gastritis_status = excluded.gastritis_status, "
+                "gerd_status = excluded.gerd_status, "
+                "hpylori_status = excluded.hpylori_status",
+                (
+                    entry["food_name"],
+                    entry["gastritis_status"],
+                    entry["gerd_status"],
+                    entry["hpylori_status"],
+                ),
+            )
+            conn.execute(
+                "UPDATE pending_food_rules SET status = 'approved', reviewed_by_user_id = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (session["user_id"], entry_id),
+            )
+
+        log_admin_action(
+            "rule_approve",
+            entry["food_name"],
+            f"g={entry['gastritis_status']}, ge={entry['gerd_status']}, hp={entry['hpylori_status']}, reason={entry['reason']}",
+        )
+        flash("Pending rule approved and added to active condition rules.")
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/rules/<int:entry_id>/reject", methods=["POST"])
+    def admin_reject_pending_rule(entry_id):
+        guard = require_admin()
+        if guard:
+            return guard
+
+        with get_db() as conn:
+            entry = conn.execute(
+                "SELECT id, food_name, reason FROM pending_food_rules WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+            if not entry:
+                flash("Pending rule not found.")
+                return redirect(url_for("admin_dashboard"))
+
+            conn.execute(
+                "UPDATE pending_food_rules SET status = 'rejected', reviewed_by_user_id = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (session["user_id"], entry_id),
+            )
+
+        log_admin_action("rule_reject", entry["food_name"], f"reason={entry['reason']}")
+        flash("Pending rule rejected.")
+        return redirect(url_for("admin_dashboard"))
 
     @app.route("/admin/model-performance")
     def admin_model_performance():

@@ -4,16 +4,144 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gut Health Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gh-unified.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
-        :root { --gh-blue: #4a6fa5; --gh-green: #2e7d32; }
-        body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
-        .card { border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-bottom: 20px; transition: 0.3s; }
-        .card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px rgba(0,0,0,0.05); }
-        .feature-icon { background-color: #e8f5e9; color: var(--gh-green); padding: 12px; border-radius: 15px; font-size: 1.5rem; }
-        .btn-nav { background-color: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; font-weight: 600; text-decoration: none; color: #334155; display: block; text-align: center; }
-        .btn-nav:hover { background-color: var(--gh-blue); color: white; border-color: var(--gh-blue); }
+        :root {
+            --ink: #17374f;
+            --blue: #1f5f8f;
+            --green: #1b8f64;
+            --amber: #b87808;
+            --rose: #b63b5b;
+            --border: #d9e8f2;
+            --panel: rgba(255, 255, 255, 0.94);
+        }
+        .glass-card {
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            box-shadow: 0 14px 30px rgba(21, 72, 104, 0.08);
+            background: var(--panel);
+            margin-bottom: 18px;
+        }
+        .hero-card {
+            background: linear-gradient(128deg, #eff8ff 0%, #f4fff8 100%);
+            border-color: #cfe4f0;
+        }
+        .action-card {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1rem;
+            background: #fff;
+            height: 100%;
+        }
+        .action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            text-decoration: none;
+            color: var(--blue);
+            font-weight: 700;
+            margin-top: 0.4rem;
+        }
+        .score-ring {
+            width: 130px;
+            height: 130px;
+            border-radius: 50%;
+            background: conic-gradient(#1b8f64 0deg, #e4edf3 0deg 360deg);
+            display: grid;
+            place-items: center;
+            margin: 0 auto;
+            position: relative;
+        }
+        .score-ring::before {
+            content: "";
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid #d9e8f2;
+            position: absolute;
+        }
+        .score-value {
+            position: relative;
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: #1f3f58;
+        }
+        .metric-tile {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 0.85rem 0.9rem;
+            background: #fff;
+            height: 100%;
+        }
+        .metric-label {
+            font-size: 0.72rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #5c7384;
+            font-weight: 700;
+        }
+        .metric-value {
+            margin-top: 0.15rem;
+            font-size: 1.2rem;
+            font-weight: 800;
+        }
+        .bar-track {
+            height: 8px;
+            border-radius: 999px;
+            background: #e4edf3;
+            overflow: hidden;
+            margin-top: 0.3rem;
+        }
+        .bar-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.45s ease;
+        }
+        .bar-acid { background: linear-gradient(90deg, #f2b24a 0%, #d45757 100%); }
+        .bar-safe { background: linear-gradient(90deg, #33a36f 0%, #1b8f64 100%); }
+        .bar-trigger { background: linear-gradient(90deg, #f59e0b 0%, #c2410c 100%); }
+        .chip-btn {
+            border: 1px solid #cfe1ed;
+            background: #fff;
+            color: #3a556b;
+            border-radius: 999px;
+            padding: 0.3rem 0.7rem;
+            font-size: 0.76rem;
+            font-weight: 700;
+        }
+        .chip-btn.active {
+            background: #eaf4fb;
+            border-color: #9dc9e3;
+            color: #1c5d8e;
+        }
+        .meal-item {
+            border: 1px solid #deebf3;
+            border-radius: 12px;
+            padding: 0.6rem 0.7rem;
+            background: #fff;
+            margin-bottom: 0.45rem;
+        }
+        .meal-item .kind {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+        }
+        .kind-acidic { color: var(--rose); }
+        .kind-supportive { color: var(--green); }
+        .kind-neutral { color: #637789; }
+        .note-box {
+            border: 1px solid #dce9f2;
+            border-radius: 16px;
+            background: #fff;
+            padding: 0.9rem;
+        }
     </style>
 </head>
 <body>
@@ -36,69 +164,40 @@
 
 <div class="container" style="max-width: 900px;">
     <div class="mb-4">
-        <h1 class="h3 fw-bold mb-1">
-            {% if is_first_visit %}
-                Welcome, {{ user_name }}!
-            {% else %}
-                Welcome back, {{ user_name }}!
-            {% endif %}
-        </h1>
-        <p class="text-muted">It&#39;s {{ current_date }}. Here is your gut health status at a glance.</p>
+        {% if is_first_visit %}
+        <h1 class="h3 fw-bold mb-1">Welcome, {{ user_name }}!</h1>
+        {% else %}
+        <h1 class="h3 fw-bold mb-1">Welcome back, {{ user_name }}!</h1>
+        {% endif %}
+        <p class="text-muted mb-0">It's {{ current_date }}. Your dashboard blends symptom intelligence with nutrition coaching.</p>
     </div>
 
-    <!-- MAIN TOOLS GRID -->
-    <div class="row g-4">
-        <!-- DIET CHECKER CARD -->
-        <div class="col-md-6">
-            <div class="card p-4 h-100">
-                <div class="d-flex justify-content-between mb-3">
-                    <div class="feature-icon"><i class="bi bi-search"></i></div>
+    <div class="glass-card hero-card p-4">
+        <div class="row g-3 align-items-center">
+            <div class="col-lg-4 text-center">
+                <div class="score-ring" id="gutScoreRing">
+                    <div class="score-value" id="gutScoreValue">{{ nutrition_snapshot.gut_score if nutrition_snapshot else 0 }}</div>
                 </div>
-                <h4 class="fw-bold">Diet Checker</h4>
-                <p class="text-muted small">Check if specific ingredients are safe or might trigger a flare-up based on their acidity levels.</p>
-                <a href="{{ url_for('diet_checker') }}" class="btn-nav mt-auto">Open Diet Checker</a>
+                <div class="small text-muted mt-2">Gut-Friendly Nutrition Score</div>
             </div>
-        </div>
-
-        <!-- MEDICATION TRACKER CARD -->
-        <div class="col-md-6">
-            <div class="card p-4 h-100">
-                <div class="d-flex justify-content-between mb-3">
-                    <div class="feature-icon" style="color: #4a6fa5; background: #eef2ff;"><i class="bi bi-capsule"></i></div>
-                </div>
-                <h4 class="fw-bold">Medication Logs</h4>
-                <p class="text-muted small">View your current prescriptions and track your daily adherence progress.</p>
-                <a href="{{ url_for('view_meds') }}" class="btn-nav mt-auto mb-3">Manage Meds</a>
-                {% if meds %}
-                <div class="mt-2">
-                    <h6 class="fw-bold mb-2">Your Medications</h6>
-                    <ul class="list-group list-group-flush">
-                        {% for med in meds %}
-                            {% set med_total = med.times_per_day * med.duration_days %}
-                            {% set med_percent = (med.total_taken / med_total * 100)|int if med_total > 0 else 0 %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-1 border-0">
-                                <span>{{ med.name }}</span>
-                                <span class="badge bg-primary rounded-pill">{{ med_percent }}%</span>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- SYMPTOM TRACKER CARD -->
-        <div class="col-md-12">
-            <div class="card p-4">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <h4 class="fw-bold mb-1">Symptom Journal</h4>
-                        <p class="text-muted small mb-3 mb-md-0">Record pain levels and triggers to help your doctor identify patterns.</p>
+            <div class="col-lg-8">
+                <div class="row g-2">
+                    <div class="col-sm-4">
+                        <div class="metric-tile">
+                            <div class="metric-label">Avg PRAL (7d)</div>
+                            <div class="metric-value">{{ nutrition_snapshot.avg_pral if nutrition_snapshot and nutrition_snapshot.avg_pral is not none else 'N/A' }}</div>
+                        </div>
                     </div>
-                    <div class="col-md-4 text-md-end">
-                        <div class="d-grid gap-2">
-                            <a href="{{ url_for('view_symptoms') }}" class="btn-nav">Log Symptoms</a>
-                            <a href="{{ url_for('insights') }}" class="btn-nav">View Clinical Insights</a>
+                    <div class="col-sm-4">
+                        <div class="metric-tile">
+                            <div class="metric-label">Trigger Exposures</div>
+                            <div class="metric-value">{{ nutrition_snapshot.trigger_hits if nutrition_snapshot else 0 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="metric-tile">
+                            <div class="metric-label">Trend</div>
+                            <div class="metric-value">{{ nutrition_snapshot.trend_label if nutrition_snapshot else 'Stable' }}</div>
                         </div>
                     </div>
                 </div>
@@ -106,21 +205,170 @@
         </div>
     </div>
 
-    <!-- CLINICAL INSIGHTS SECTION -->
-    <div class="card border-0 p-4 mt-2" style="background-color: #fff8e1;">
-        <div class="d-flex align-items-center mb-3">
-            <i class="bi bi-lightbulb-fill text-warning me-2 fs-4"></i>
-            <h5 class="fw-bold mb-0">Daily Nutritional Insight</h5>
+    <div class="row g-3 mb-2">
+        <div class="col-md-4">
+            <div class="action-card">
+                <div class="fw-bold">Diet Checker</div>
+                <div class="small text-muted mt-1">Predict flare risk and get source-backed meal guidance.</div>
+                <a href="{{ url_for('diet_checker') }}" class="action-link"><i class="bi bi-arrow-right-circle"></i>Open Diet Checker</a>
+            </div>
         </div>
-        <p class="small text-dark mb-2">
-            When checking foods, remember that <strong>Initial pH</strong> and <strong>Post-Digestion Acid Load (PRAL)</strong> are different. 
-            Some acidic-tasting foods (like lemons) actually have a negative PRAL, meaning they become alkalizing once metabolized.
-        </p>
-        <footer class="blockquote-footer mt-2">
-            Source: <cite title="Source Title">https://www.healthline_2.com/nutrition/acidic-foods#bottom-line</cite>
-        </footer>
+        <div class="col-md-4">
+            <div class="action-card">
+                <div class="fw-bold">Symptom Intelligence</div>
+                <div class="small text-muted mt-1">Track symptoms, triggers, and date-specific logs.</div>
+                <a href="{{ url_for('view_symptoms') }}" class="action-link"><i class="bi bi-arrow-right-circle"></i>Open Symptoms</a>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="action-card">
+                <div class="fw-bold">Medication Routine</div>
+                <div class="small text-muted mt-1">Keep adherence stable while adjusting nutrition choices.</div>
+                <a href="{{ url_for('view_meds') }}" class="action-link"><i class="bi bi-arrow-right-circle"></i>Manage Meds</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="fw-bold mb-0">Weekly Nutrition Dynamics</h5>
+            <span class="small text-muted">Last 7 days</span>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="note-box">
+                    <div class="metric-label">Acidic Meal Exposure</div>
+                    <div class="metric-value">{{ nutrition_snapshot.acidic_meals if nutrition_snapshot else 0 }}</div>
+                    <div class="bar-track"><div id="acidBar" class="bar-fill bar-acid"></div></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="note-box">
+                    <div class="metric-label">Supportive Choices</div>
+                    <div class="metric-value">{{ nutrition_snapshot.supportive_meals if nutrition_snapshot else 0 }}</div>
+                    <div class="bar-track"><div id="safeBar" class="bar-fill bar-safe"></div></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="note-box">
+                    <div class="metric-label">Rule-Based Trigger Hits</div>
+                    <div class="metric-value">{{ nutrition_snapshot.trigger_hits if nutrition_snapshot else 0 }}</div>
+                    <div class="bar-track"><div id="triggerBar" class="bar-fill bar-trigger"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-12">
+            <div class="glass-card p-4 h-100" style="background: linear-gradient(180deg, #fff9ed 0%, #ffffff 100%);">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">Nutrition Insight</h5>
+                    <button id="nextInsight" class="btn btn-outline-secondary btn-sm rounded-pill">Next</button>
+                </div>
+                <h6 id="insightTitle" class="fw-bold mb-2"></h6>
+                <p id="insightMessage" class="small text-dark mb-2"></p>
+                <div class="small text-muted">Sources: <span id="insightSources"></span></div>
+                <hr>
+                <a href="{{ url_for('insights') }}" class="action-link"><i class="bi bi-clipboard2-pulse"></i>Open Clinical Insights</a>
+            </div>
+        </div>
     </div>
 </div>
+
+<script id="nutritionalInsightsData" type="application/json">{{ nutritional_insights | tojson }}</script>
+<script id="nutritionSnapshotData" type="application/json">{{ nutrition_snapshot | tojson }}</script>
+<script>
+    (function () {
+        const snapshotEl = document.getElementById('nutritionSnapshotData');
+        let snapshot = {};
+        try {
+            snapshot = JSON.parse(snapshotEl?.textContent || '{}');
+        } catch (error) {
+            snapshot = {};
+        }
+
+        const score = Number(snapshot.gut_score || 0);
+        const ring = document.getElementById('gutScoreRing');
+        if (ring) {
+            const angle = Math.max(0, Math.min(360, Math.round((score / 100) * 360)));
+            ring.style.background = `conic-gradient(#1b8f64 ${angle}deg, #e4edf3 ${angle}deg 360deg)`;
+        }
+
+        const totalMeals = Math.max(1, Number(snapshot.recent_meals || 0));
+        const acidPct = Math.min(100, Math.round((Number(snapshot.acidic_meals || 0) / totalMeals) * 100));
+        const safePct = Math.min(100, Math.round((Number(snapshot.supportive_meals || 0) / totalMeals) * 100));
+        const triggerPct = Math.min(100, Math.round((Number(snapshot.trigger_hits || 0) / totalMeals) * 100));
+        const acidBar = document.getElementById('acidBar');
+        const safeBar = document.getElementById('safeBar');
+        const triggerBar = document.getElementById('triggerBar');
+        if (acidBar) acidBar.style.width = `${acidPct}%`;
+        if (safeBar) safeBar.style.width = `${safePct}%`;
+        if (triggerBar) triggerBar.style.width = `${triggerPct}%`;
+
+        const dataEl = document.getElementById('nutritionalInsightsData');
+        const titleEl = document.getElementById('insightTitle');
+        const messageEl = document.getElementById('insightMessage');
+        const sourcesEl = document.getElementById('insightSources');
+        const nextBtn = document.getElementById('nextInsight');
+        if (!dataEl || !titleEl || !messageEl || !sourcesEl) {
+            return;
+        }
+
+        let insights = [];
+        try {
+            insights = JSON.parse(dataEl.textContent || '[]');
+        } catch (error) {
+            insights = [];
+        }
+        if (!Array.isArray(insights) || insights.length === 0) {
+            return;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function renderInsight(index) {
+            const insight = insights[index % insights.length] || {};
+            titleEl.textContent = insight.title || 'Nutritional insight';
+            messageEl.textContent = insight.message || '';
+
+            const refs = Array.isArray(insight.references) ? insight.references : [];
+            if (refs.length === 0) {
+                sourcesEl.textContent = 'N/A';
+                return;
+            }
+
+            sourcesEl.innerHTML = refs.map((ref) => {
+                const url = escapeHtml(ref.url || '#');
+                const title = escapeHtml(ref.title || ref.url || 'Reference');
+                return `<a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a>`;
+            }).join(' | ');
+        }
+
+        const seedBucket = Math.floor(Date.now() / (5 * 60 * 1000));
+        let currentIndex = seedBucket % insights.length;
+        renderInsight(currentIndex);
+
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                currentIndex = (currentIndex + 1) % insights.length;
+                renderInsight(currentIndex);
+            });
+        }
+
+        setInterval(() => {
+            currentIndex = (currentIndex + 1) % insights.length;
+            renderInsight(currentIndex);
+        }, 5 * 60 * 1000);
+    })();
+</script>
 
 </body>
 </html>

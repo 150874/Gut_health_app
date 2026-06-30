@@ -11,6 +11,9 @@ import pandas as pd
 import json
 import os
 import secrets
+import re
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from admin_routes import register_admin_routes
 
 
@@ -197,6 +200,352 @@ MODEL_CONDITION_MAP = {
     "general": "General"
 }
 
+DIET_GUIDANCE_REFERENCE_URL = "https://www.healthline.com/nutrition/acidic-foods"
+DIET_GUIDANCE_REFERENCE_URL_2 = "https://www.healthline.com/health/acid-foods-to-avoid"
+DIET_GUIDANCE_REFERENCES = [
+    {
+        "title": "Healthline - Acidic Foods",
+        "url": DIET_GUIDANCE_REFERENCE_URL,
+    },
+    {
+        "title": "Healthline - Acid Foods to Avoid",
+        "url": DIET_GUIDANCE_REFERENCE_URL_2,
+    },
+    {
+        "title": "Healthline - GERD Foods to Avoid",
+        "url": "https://www.healthline.com/health/gerd/foods-to-avoid",
+    },
+    {
+        "title": "Healthline - High Stomach Acid Symptoms",
+        "url": "https://www.healthline.com/health/high-stomach-acid-symptoms",
+    },
+    {
+        "title": "Healthline - Foods That Cause Heartburn",
+        "url": "https://www.healthline.com/nutrition/foods-that-cause-heartburn",
+    },
+    {
+        "title": "Healthline - GERD Overview",
+        "url": "https://www.healthline.com/health/gerd",
+    },
+    {
+        "title": "Healthline - How Strong Is Stomach Acid",
+        "url": "https://www.healthline.com/health/how-strong-is-stomach-acid",
+    },
+    {
+        "title": "Healthline - GERD Home Remedies",
+        "url": "https://www.healthline.com/health/gerd/home-remedies",
+    },
+    {
+        "title": "Healthline - GERD Diet Restrictions",
+        "url": "https://www.healthline.com/health/gerd-acid-reflux/diet-restrictions",
+    },
+    {
+        "title": "Rela Institute - Acidity Causes, Foods to Avoid, Remedies",
+        "url": "https://www.relainstitute.com/articles/acidity-causes-foods-to-avoid-and-remedies/",
+    },
+    {
+        "title": "Collins Dental Group - Food Acidity Chart",
+        "url": "https://collinsdentalgroup.com.au/food-acidity-chart/",
+    },
+    {
+        "title": "UCF Health - H. pylori Diet",
+        "url": "https://ucfhealth.com/our-services/lifestyle-medicine/h-pylori-diet/",
+    },
+    {
+        "title": "Everyday Health - Foods Not to Eat with H. pylori",
+        "url": "https://www.everydayhealth.com/digestive-health/foods-not-to-eat-with-pylori-bacteria/",
+    },
+]
+
+
+def get_homepage_nutritional_insights():
+    return [
+        {
+            "title": "pH and PRAL are not the same",
+            "message": "Some foods taste acidic but can still produce a lower acid load after metabolism. Review both immediate trigger profile and PRAL context.",
+            "references": [
+                {"title": "Healthline - Acidic Foods", "url": "https://www.healthline.com/nutrition/acidic-foods"},
+                {"title": "Collins Dental Group - Food Acidity Chart", "url": "https://collinsdentalgroup.com.au/food-acidity-chart/"},
+            ],
+        },
+        {
+            "title": "GERD patterns can be meal-driven",
+            "message": "Late, fatty, spicy, and highly acidic meals can worsen reflux symptoms in sensitive users, especially when stress is high.",
+            "references": [
+                {"title": "Healthline - GERD Foods to Avoid", "url": "https://www.healthline.com/health/gerd/foods-to-avoid"},
+                {"title": "Healthline - Foods That Cause Heartburn", "url": "https://www.healthline.com/nutrition/foods-that-cause-heartburn"},
+            ],
+        },
+        {
+            "title": "Hydration and meal timing matter",
+            "message": "Flare risk is not only about the food itself. Hydration, timing, and stress at the meal can shift symptom intensity.",
+            "references": [
+                {"title": "Healthline - GERD Home Remedies", "url": "https://www.healthline.com/health/gerd/home-remedies"},
+                {"title": "Healthline - GERD Overview", "url": "https://www.healthline.com/health/gerd"},
+            ],
+        },
+        {
+            "title": "H. pylori users may need stricter food selection",
+            "message": "When H. pylori symptoms are active, spicy, highly acidic, and irritating foods are often less tolerated and may need temporary restriction.",
+            "references": [
+                {"title": "UCF Health - H. pylori Diet", "url": "https://ucfhealth.com/our-services/lifestyle-medicine/h-pylori-diet/"},
+                {"title": "Everyday Health - Foods Not to Eat with H. pylori", "url": "https://www.everydayhealth.com/digestive-health/foods-not-to-eat-with-pylori-bacteria/"},
+            ],
+        },
+        {
+            "title": "Acidity symptoms are multi-factor",
+            "message": "Frequent upper abdominal burning or reflux symptoms can reflect both meal composition and broader acidity patterns.",
+            "references": [
+                {"title": "Healthline - High Stomach Acid Symptoms", "url": "https://www.healthline.com/health/high-stomach-acid-symptoms"},
+                {"title": "Rela Institute - Acidity Causes, Foods to Avoid, Remedies", "url": "https://www.relainstitute.com/articles/acidity-causes-foods-to-avoid-and-remedies/"},
+            ],
+        },
+        {
+            "title": "Diet restrictions should be specific",
+            "message": "Targeted restrictions based on your condition are usually more sustainable than removing too many foods at once.",
+            "references": [
+                {"title": "Healthline - GERD Diet Restrictions", "url": "https://www.healthline.com/health/gerd-acid-reflux/diet-restrictions"},
+                {"title": "Healthline - Acid Foods to Avoid", "url": "https://www.healthline.com/health/acid-foods-to-avoid"},
+            ],
+        },
+    ]
+
+
+def build_home_nutrition_snapshot(conn, user_id, condition_value):
+    column = CONDITION_COLUMN_MAP.get((condition_value or "").lower(), "gastritis_status")
+    rows = conn.execute(
+        f"""
+        SELECT
+            f.food_name,
+            f.timestamp,
+            p.pral_score,
+            fr.{column} AS rule_status
+        FROM food_logs f
+        LEFT JOIN food_pral p ON LOWER(p.food_name) = LOWER(f.food_name)
+        LEFT JOIN food_rules fr ON LOWER(fr.food_name) = LOWER(f.food_name)
+        WHERE f.user_id = ?
+          AND f.timestamp >= datetime('now', '-7 day')
+        ORDER BY f.timestamp DESC
+        LIMIT 90
+        """,
+        (user_id,),
+    ).fetchall()
+
+    previous_trigger_hits = conn.execute(
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM food_logs f
+        LEFT JOIN food_rules fr ON LOWER(fr.food_name) = LOWER(f.food_name)
+        WHERE f.user_id = ?
+          AND f.timestamp >= datetime('now', '-14 day')
+          AND f.timestamp < datetime('now', '-7 day')
+          AND LOWER(COALESCE(fr.{column}, 'unknown')) = 'avoid'
+        """,
+        (user_id,),
+    ).fetchone()["cnt"]
+
+    known_prals = [float(r["pral_score"]) for r in rows if r["pral_score"] is not None]
+    acidic_meals = sum(1 for value in known_prals if value >= 3.0)
+    supportive_meals = sum(1 for value in known_prals if value <= -1.0)
+    trigger_hits = sum(1 for r in rows if str(r["rule_status"] or "").strip().lower() == "avoid")
+    safe_hits = sum(1 for r in rows if str(r["rule_status"] or "").strip().lower() == "safe")
+    recent_meals = len(rows)
+    avg_pral = round(sum(known_prals) / len(known_prals), 2) if known_prals else None
+
+    trend_delta = int(trigger_hits) - int(previous_trigger_hits or 0)
+    if trend_delta <= -2:
+        trend_label = "Improving"
+    elif trend_delta >= 2:
+        trend_label = "Needs attention"
+    else:
+        trend_label = "Stable"
+
+    gut_score = 62
+    gut_score += min(14, supportive_meals * 2)
+    gut_score -= min(18, acidic_meals * 2)
+    gut_score += min(8, safe_hits)
+    gut_score -= min(12, trigger_hits * 2)
+    if recent_meals == 0:
+        gut_score = 50
+    gut_score = int(max(0, min(100, gut_score)))
+
+    food_items = []
+    for row in rows[:18]:
+        pral = row["pral_score"]
+        kind = "neutral"
+        if pral is not None:
+            pral_value = float(pral)
+            if pral_value >= 3.0:
+                kind = "acidic"
+            elif pral_value <= -1.0:
+                kind = "supportive"
+        food_items.append(
+            {
+                "food": row["food_name"],
+                "timestamp": row["timestamp"],
+                "pral": round(float(pral), 2) if pral is not None else None,
+                "rule_status": row["rule_status"] or "unknown",
+                "kind": kind,
+            }
+        )
+
+    return {
+        "gut_score": gut_score,
+        "avg_pral": avg_pral,
+        "recent_meals": recent_meals,
+        "acidic_meals": acidic_meals,
+        "supportive_meals": supportive_meals,
+        "trigger_hits": trigger_hits,
+        "safe_hits": safe_hits,
+        "trend_label": trend_label,
+        "trend_delta": trend_delta,
+        "food_items": food_items,
+    }
+
+REFERENCE_RISK_KEYWORDS = [
+    "acidic", "acid", "heartburn", "reflux", "gerd", "spicy", "fried", "fatty",
+    "tomato", "citrus", "orange", "lemon", "coffee", "chocolate", "mint", "peppermint",
+    "onion", "garlic", "soda", "carbonated", "alcohol",
+]
+REFERENCE_FETCH_TIMEOUT_SECONDS = 3.0
+REFERENCE_CACHE_TTL_SECONDS = 60 * 60 * 24
+_reference_cache = {"expires_at": 0.0, "pages": {}}
+
+
+def _strip_html_to_text(html):
+    text = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
+    text = re.sub(r"(?is)<style.*?>.*?</style>", " ", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().lower()
+
+
+def _fetch_reference_page_text(url):
+    req = urllib_request.Request(
+        url,
+        headers={"User-Agent": "GutHealthApp/1.0 (+reference-check)"},
+    )
+    with urllib_request.urlopen(req, timeout=REFERENCE_FETCH_TIMEOUT_SECONDS) as response:
+        body = response.read().decode("utf-8", errors="ignore")
+        return _strip_html_to_text(body)
+
+
+def get_reference_corpus(force_refresh=False):
+    now_ts = time.time()
+    if (not force_refresh) and _reference_cache["pages"] and now_ts < float(_reference_cache["expires_at"]):
+        return _reference_cache["pages"]
+
+    pages = {}
+    for ref in DIET_GUIDANCE_REFERENCES:
+        url = ref["url"]
+        try:
+            pages[url] = _fetch_reference_page_text(url)
+        except (urllib_error.URLError, TimeoutError, ValueError, OSError):
+            pages[url] = ""
+
+    _reference_cache["pages"] = pages
+    _reference_cache["expires_at"] = now_ts + REFERENCE_CACHE_TTL_SECONDS
+    return pages
+
+
+def get_reference_risk_signal(food_name):
+    normalized_food = normalize_food_name(food_name)
+    corpus = get_reference_corpus()
+    api_checked = any(bool(text) for text in corpus.values())
+
+    matched_keywords = [kw for kw in REFERENCE_RISK_KEYWORDS if kw in normalized_food]
+    matched_sources = []
+    for ref in DIET_GUIDANCE_REFERENCES:
+        text = corpus.get(ref["url"], "")
+        if not text:
+            continue
+        keyword_hit = any(kw in text for kw in matched_keywords)
+        food_hit = len(normalized_food) >= 4 and normalized_food in text
+        if keyword_hit or food_hit:
+            matched_sources.append({"title": ref["title"], "url": ref["url"]})
+
+    detected = bool(matched_keywords) and bool(matched_sources)
+    score_boost = min(0.8, 0.2 * len(matched_keywords)) if detected else 0.0
+    return {
+        "detected": detected,
+        "api_checked": api_checked,
+        "matched_keywords": matched_keywords,
+        "matched_sources": matched_sources,
+        "score_boost": round(float(score_boost), 2),
+    }
+
+
+def infer_condition_rule_statuses(food_name, meal_pral, reference_detected=False):
+    normalized_food = normalize_food_name(food_name)
+    risk_tokens = [
+        "fried", "spicy", "pepper", "tomato", "citrus", "orange", "lemon", "coffee",
+        "chocolate", "mint", "onion", "garlic", "soda", "alcohol", "pizza", "burger",
+    ]
+    safe_tokens = ["banana", "oat", "oatmeal", "salad", "vegetable", "lentil", "bean", "tofu"]
+
+    has_risk_token = any(token in normalized_food for token in risk_tokens)
+    has_safe_token = any(token in normalized_food for token in safe_tokens)
+    pral_value = to_float(meal_pral, 0)
+
+    if reference_detected or has_risk_token or pral_value >= 3.5:
+        return {
+            "gastritis_status": "avoid",
+            "gerd_status": "avoid",
+            "hpylori_status": "avoid",
+            "reason": "risk profile matched acid/reflux triggers",
+        }
+
+    if has_safe_token or pral_value <= -1.5:
+        return {
+            "gastritis_status": "safe",
+            "gerd_status": "safe",
+            "hpylori_status": "safe",
+            "reason": "lower-acid or gentle food profile",
+        }
+
+    return {
+        "gastritis_status": "safe",
+        "gerd_status": "safe",
+        "hpylori_status": "safe",
+        "reason": "no strong trigger signal detected; treated as safe by default",
+    }
+
+
+def classify_food_status(condition_value, food_name, meal_pral, db_rule_status=None, reference_signal=None):
+    normalized_condition = str(condition_value or "").strip().lower()
+    normalized_rule = str(db_rule_status or "").strip().lower()
+    reference_signal = reference_signal or {}
+
+    if normalized_rule in ("safe", "avoid"):
+        base_status = normalized_rule
+        base_reason = f"Condition rule marks this food as {normalized_rule}."
+    else:
+        inferred = infer_condition_rule_statuses(
+            food_name=food_name,
+            meal_pral=meal_pral,
+            reference_detected=bool(reference_signal.get("detected")),
+        )
+        column = CONDITION_COLUMN_MAP.get(normalized_condition, "gastritis_status")
+        base_status = str(inferred.get(column) or "safe").strip().lower()
+        base_reason = inferred.get("reason") or "Inferred from food profile and reference signals."
+
+    # Source-backed trigger signals take precedence when available.
+    if bool(reference_signal.get("detected")):
+        return {
+            "status": "avoid",
+            "reason": "Reference sources flag this food as a likely reflux/acidity trigger.",
+            "source": "reference_override",
+            "base_status": base_status,
+        }
+
+    final_status = "safe" if base_status == "safe" else "avoid"
+    return {
+        "status": final_status,
+        "reason": base_reason,
+        "source": "rule_or_inferred",
+        "base_status": base_status,
+    }
+
 
 def get_admin_emails():
     raw = os.getenv("ADMIN_EMAILS", "")
@@ -264,9 +613,60 @@ def estimate_pral_score(food_name, meal_type="Lunch"):
     return float(fallback), "estimated_default"
 
 
-def suggest_alternative_meals(condition_value, meal_type="Lunch", exclude_food="", limit=3):
+def _get_general_safe_alternatives(condition_value):
+    key = str(condition_value or "").strip().lower()
+    common_refs = {
+        "gerd": {
+            "title": "Healthline - GERD Foods to Avoid",
+            "url": "https://www.healthline.com/health/gerd/foods-to-avoid",
+        },
+        "gastritis": {
+            "title": "Healthline - Acid Foods to Avoid",
+            "url": "https://www.healthline.com/health/acid-foods-to-avoid",
+        },
+        "hpylori": {
+            "title": "UCF Health - H. pylori Diet",
+            "url": "https://ucfhealth.com/our-services/lifestyle-medicine/h-pylori-diet/",
+        },
+    }
+    ref = common_refs.get(key, {
+        "title": "Healthline - Acidic Foods",
+        "url": "https://www.healthline.com/nutrition/acidic-foods",
+    })
+
+    return [
+        {
+            "food": "Oatmeal",
+            "reason": "Generally gentle and less likely to irritate when unsweetened.",
+            "source_label": "General guidance",
+            "reference": ref,
+        },
+        {
+            "food": "Banana",
+            "reason": "Commonly tolerated and often used as a low-irritation option.",
+            "source_label": "General guidance",
+            "reference": ref,
+        },
+        {
+            "food": "Steamed vegetables",
+            "reason": "Lower-fat, less spicy preparation is usually easier on symptoms.",
+            "source_label": "General guidance",
+            "reference": ref,
+        },
+        {
+            "food": "Plain rice",
+            "reason": "Simple, bland base that can reduce meal irritation.",
+            "source_label": "General guidance",
+            "reference": ref,
+        },
+    ]
+
+
+def suggest_alternative_meals(condition_value, meal_type="Lunch", exclude_food="", limit=3, reference_sources=None):
     column = CONDITION_COLUMN_MAP.get(condition_value, "gastritis_status")
     normalized_exclude = normalize_food_name(exclude_food)
+    reference_sources = reference_sources or []
+    preferred_ref = reference_sources[0] if reference_sources else None
 
     with get_db() as conn:
         rows = conn.execute(
@@ -288,42 +688,124 @@ def suggest_alternative_meals(condition_value, meal_type="Lunch", exclude_food="
         alternatives.append({
             "food": row["food_name"],
             "reason": reason,
-            "pral_score": round(float(row["pral_score"]), 2),
+            "source_label": "Condition rule database",
+            "reference": preferred_ref,
             "meal_type": meal_type,
         })
+
+    if len(alternatives) < limit:
+        fallback = _get_general_safe_alternatives(condition_value)
+        existing = {normalize_food_name(item["food"]) for item in alternatives}
+        existing.add(normalized_exclude)
+        for item in fallback:
+            if len(alternatives) >= limit:
+                break
+            if normalize_food_name(item["food"]) in existing:
+                continue
+            alternatives.append(item)
+            existing.add(normalize_food_name(item["food"]))
+
     return alternatives
 
 
 def build_followup_answer(question, context):
     q = (question or "").strip().lower()
     if not q:
-        return "Ask me anything about this meal, like why the risk is high, better options, or how to lower risk next time."
+        return "Ask me things like: suggest alternatives, avoid specific foods, or explain why this meal may not suit your condition."
 
     why_points = context.get("why_points") or []
     alternatives = context.get("alternatives") or []
     risk_level = context.get("risk_level", "moderate")
     food_name = context.get("food_name", "this meal")
+    recommendation = str(context.get("recommendation") or "").strip().lower()
+    matched_refs = context.get("reference_matches") or []
+    all_refs = context.get("reference_sources") or []
+    condition_value = str(context.get("condition") or "").strip().lower()
+
+    def extract_exclusions(text):
+        exclusions = set()
+        patterns = [
+            r"allergic to\s+([a-z\s,-]+)",
+            r"apart from\s+([a-z\s,-]+)",
+            r"except\s+([a-z\s,-]+)",
+            r"without\s+([a-z\s,-]+)",
+            r"not\s+([a-z\s,-]+)",
+        ]
+        stop_words = {"and", "or", "the", "a", "an", "foods", "food", "maybe", "i", "am"}
+        for pattern in patterns:
+            for match in re.findall(pattern, text):
+                chunks = re.split(r",|/| and | or ", match)
+                for chunk in chunks:
+                    token = normalize_food_name(chunk)
+                    token = re.sub(r"[^a-z\s]", "", token).strip()
+                    if token and token not in stop_words and len(token) >= 3:
+                        exclusions.add(token)
+        return exclusions
+
+    def matches_exclusion(food, exclusions):
+        normalized = normalize_food_name(food)
+        return any(ex in normalized for ex in exclusions)
+
+    def build_alternative_lines(items, exclusions):
+        filtered = [item for item in items if not matches_exclusion(item.get("food", ""), exclusions)]
+        if not filtered and condition_value:
+            filtered = _get_general_safe_alternatives(condition_value)
+            filtered = [item for item in filtered if not matches_exclusion(item.get("food", ""), exclusions)]
+        if not filtered:
+            return None
+
+        selected = filtered[:3]
+        lines = []
+        for idx, item in enumerate(selected, 1):
+            food = item.get("food", "Option")
+            reason = item.get("reason", "Usually gentler for this condition")
+            lines.append(f"{idx}. {food} - {reason}")
+        return lines
+
+    def build_reference_hint():
+        refs = matched_refs[:2] if matched_refs else all_refs[:2]
+        if not refs:
+            return ""
+        ref_text = " | ".join(f"{ref.get('title', 'Source')}: {ref.get('url', '')}" for ref in refs)
+        return f"\nUseful sources: {ref_text}"
+
+    exclusions = extract_exclusions(q)
 
     if "why" in q or "reason" in q:
         if why_points:
             return "Main reasons: " + "; ".join(why_points[:3])
-        return "The risk is based on your meal acid load, hydration, stress level, and condition profile."
+        return "Main reasons are based on your condition profile, recent symptom pattern, and meal characteristics."
 
-    if "alternative" in q or "instead" in q or "replace" in q:
-        if alternatives:
-            picks = ", ".join(item["food"] for item in alternatives[:3])
-            return f"Better options for your condition: {picks}."
-        return "Try a lower-acid, less spicy, and better-hydrated meal option for your condition."
+    if (
+        "alternative" in q or "alternatives" in q or "instead" in q or "replace" in q
+        or "what else" in q or "else could" in q or "name" in q or "options" in q
+        or "can i eat" in q or "could be consumed" in q
+    ):
+        lines = build_alternative_lines(alternatives, exclusions)
+        if lines:
+            prefix = "Here are safer options for you:"
+            if exclusions:
+                excluded = ", ".join(sorted(exclusions))
+                prefix = f"Here are safer options that avoid: {excluded}."
+            return prefix + "\n" + "\n".join(lines) + build_reference_hint()
+        return "I could not find suitable alternatives after applying your exclusions. Try sharing specific foods you want to avoid."
 
     if "lower" in q and "risk" in q:
-        return "To lower risk: improve hydration (>= 300 ml), reduce acidic or spicy items, and keep stress low during meals."
+        return "To lower discomfort risk, choose bland options, avoid spicy or fried meals, and stay hydrated around meals."
 
-    if "safe" in q:
-        if risk_level == "low":
-            return f"{food_name.capitalize()} appears relatively safe for now, but continue monitoring symptoms."
-        return f"{food_name.capitalize()} is not the safest pick right now based on your current inputs."
+    if "safe" in q or "unsafe" in q:
+        if recommendation == "safe to consume" or risk_level == "low":
+            return f"{food_name.capitalize()} looks acceptable for your condition right now. Continue to monitor how you feel after eating."
+        lines = build_alternative_lines(alternatives, exclusions)
+        if lines:
+            return f"{food_name.capitalize()} is not a good fit right now. Try these instead:\n" + "\n".join(lines)
+        return f"{food_name.capitalize()} is not a good fit right now for your condition."
 
-    return "Based on this meal, focus on lower acid load, better hydration, and calmer eating conditions. Ask for alternatives for specific swaps."
+    lines = build_alternative_lines(alternatives, exclusions)
+    if lines and recommendation == "unsafe to consume":
+        return "This meal is not the best fit for your condition. Here are better options:\n" + "\n".join(lines) + build_reference_hint()
+
+    return "Tell me exactly what you want to avoid (for example fish, dairy, eggs), and I will list better alternatives for your condition."
 
 
 def build_prediction_why_points(user_data, condition_value, food_name, looked_up_pral=None):
@@ -502,6 +984,8 @@ def build_prediction_result(score):
         "message": message,
         "recommendation": recommendation,
         "recommendation_reason": recommendation_reason,
+        "reference_source_url": DIET_GUIDANCE_REFERENCE_URL,
+        "reference_sources": DIET_GUIDANCE_REFERENCES,
         "confidence_percent": confidence_percent,
         "confidence_label": confidence_label,
         "calibration_hint": (
@@ -583,6 +1067,23 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS symptom_knowledge (id INTEGER PRIMARY KEY AUTOINCREMENT, symptom_name TEXT UNIQUE, duration TEXT, seek_help TEXT, tips TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS medications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, dosage TEXT, time TEXT, times_per_day INTEGER DEFAULT 1, duration_days INTEGER DEFAULT 14, instructions TEXT, taken_today INTEGER DEFAULT 0, last_taken_date TEXT, total_taken INTEGER DEFAULT 0)")
         c.execute("CREATE TABLE IF NOT EXISTS food_pral (id INTEGER PRIMARY KEY AUTOINCREMENT, food_name TEXT UNIQUE, pral_score REAL, source TEXT DEFAULT 'manual', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS pending_food_rules ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "food_name TEXT UNIQUE, "
+            "gastritis_status TEXT, "
+            "gerd_status TEXT, "
+            "hpylori_status TEXT, "
+            "suggested_by_user_id INTEGER, "
+            "reason TEXT, "
+            "source_signals TEXT, "
+            "status TEXT DEFAULT 'pending', "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+            "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+            "reviewed_by_user_id INTEGER, "
+            "reviewed_at DATETIME"
+            ")"
+        )
         c.execute("CREATE TABLE IF NOT EXISTS admin_audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER, action_type TEXT, target TEXT, details TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
         c.execute("CREATE TABLE IF NOT EXISTS request_metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, route TEXT, method TEXT, duration_ms REAL, status_code INTEGER, user_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
 
@@ -590,6 +1091,7 @@ def init_db():
         c.execute("CREATE INDEX IF NOT EXISTS idx_symptoms_user_timestamp ON symptoms(user_id, timestamp)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_request_metrics_created_at ON request_metrics(created_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_request_metrics_route ON request_metrics(route)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_pending_food_rules_status ON pending_food_rules(status, updated_at)")
 
             # --- Migration: Add total_taken column if missing ---
         c.execute("PRAGMA table_info(medications)")
@@ -684,6 +1186,7 @@ def home():
         progress = int((taken_doses / total_doses) * 100) if total_doses > 0 else 0
         # 4. All Meds for dashboard
         meds = conn.execute("SELECT * FROM medications WHERE user_id = ? ORDER BY id DESC", (uid,)).fetchall()
+        nutrition_snapshot = build_home_nutrition_snapshot(conn, uid, session.get("condition", "general"))
 
     return render_template("index.html", 
                            user_name=session["user_name"], 
@@ -693,7 +1196,9 @@ def home():
                            meds_count=taken_doses, 
                            symptoms_count=symptoms_count, 
                            progress=progress,
-                           meds=meds)
+                           meds=meds,
+                           nutritional_insights=get_homepage_nutritional_insights(),
+                           nutrition_snapshot=nutrition_snapshot)
 
 
 register_admin_routes(
@@ -749,14 +1254,11 @@ def signup():
         is_admin = 1 if is_admin_email(email) else 0
         age = to_float(request.form.get("age"), 30)
         bmi = to_float(request.form.get("bmi"), 24.5)
-        hpylori = request.form.get("h_pylori_result", "Negative").strip() or "Negative"
-        if request.form["condition"] != "hpylori":
-            hpylori = "Not Applicable"
         try:
             with get_db() as conn:
                 conn.execute(
-                    "INSERT INTO users (name, email, password, condition, age, bmi, h_pylori_result, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (request.form["name"], email, hashed_pw, request.form["condition"], age, bmi, hpylori, is_admin)
+                    "INSERT INTO users (name, email, password, condition, age, bmi, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (request.form["name"], email, hashed_pw, request.form["condition"], age, bmi, is_admin)
                 )
             # Mark this browser session so the next successful login can show a first-time welcome.
             session["just_signed_up"] = True
@@ -787,7 +1289,6 @@ def login():
                 "condition": user["condition"],
                 "age": to_float(user["age"], 30),
                 "bmi": to_float(user["bmi"], 24.5),
-                "h_pylori_result": (user["h_pylori_result"] or "Negative"),
                 "is_admin": bool(user["is_admin"])
             })
             session["is_first_visit"] = just_signed_up
@@ -818,17 +1319,13 @@ def profile():
 
         age = to_float(request.form.get("age"), 30)
         bmi = to_float(request.form.get("bmi"), 24.5)
-        hpylori = request.form.get("h_pylori_result", "Negative").strip() or "Negative"
-        if condition != "hpylori":
-            hpylori = "Not Applicable"
-
         with get_db() as conn:
             conn.execute(
-                "UPDATE users SET name = ?, condition = ?, age = ?, bmi = ?, h_pylori_result = ? WHERE id = ?",
-                (name, condition, age, bmi, hpylori, user_id)
+                "UPDATE users SET name = ?, condition = ?, age = ?, bmi = ? WHERE id = ?",
+                (name, condition, age, bmi, user_id)
             )
             updated = conn.execute(
-                "SELECT name, condition, age, bmi, h_pylori_result, is_admin FROM users WHERE id = ?",
+                "SELECT name, condition, age, bmi, is_admin FROM users WHERE id = ?",
                 (user_id,)
             ).fetchone()
 
@@ -837,7 +1334,6 @@ def profile():
             session["condition"] = updated["condition"]
             session["age"] = to_float(updated["age"], 30)
             session["bmi"] = to_float(updated["bmi"], 24.5)
-            session["h_pylori_result"] = (updated["h_pylori_result"] or "Negative")
             session["is_admin"] = bool(updated["is_admin"])
 
         flash("Profile updated successfully.")
@@ -845,7 +1341,7 @@ def profile():
 
     with get_db() as conn:
         user = conn.execute(
-            "SELECT name, email, condition, age, bmi, h_pylori_result FROM users WHERE id = ?",
+            "SELECT name, email, condition, age, bmi FROM users WHERE id = ?",
             (user_id,)
         ).fetchone()
 
@@ -872,24 +1368,63 @@ def diet_checker():
         session.pop("last_prediction", None)
         session.pop("last_prediction_context", None)
     
-    with get_db() as conn:
-        recent_logs = conn.execute("SELECT id, food_name, timestamp FROM food_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5", (session["user_id"],)).fetchall()
-        profile_row = conn.execute(
-            "SELECT age, bmi, h_pylori_result FROM users WHERE id = ?",
-            (session["user_id"],)
-        ).fetchone()
-    user_profile = {
-        "age": to_float(profile_row["age"], 30) if profile_row else 30,
-        "bmi": to_float(profile_row["bmi"], 24.5) if profile_row else 24.5,
-        "h_pylori_result": (profile_row["h_pylori_result"] if profile_row else "Negative") or "Negative"
-    }
     return render_template("diet_checker.html", 
                            food=food, 
                            status=status, 
-                           recent_logs=recent_logs, 
                            prediction_result=session.get("last_prediction"),
-                           condition=session["condition"],
-                           user_profile=user_profile)
+                           condition=session["condition"])
+
+
+@app.route("/food_history")
+def food_history():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    with get_db() as conn:
+        today_logs = conn.execute(
+            """
+            SELECT id, food_name, timestamp
+            FROM food_logs
+            WHERE user_id = ?
+              AND timestamp >= datetime('now', 'start of day')
+            ORDER BY timestamp DESC
+            LIMIT 200
+            """,
+            (session["user_id"],)
+        ).fetchall()
+
+        last_week_logs = conn.execute(
+            """
+            SELECT id, food_name, timestamp
+            FROM food_logs
+            WHERE user_id = ?
+              AND timestamp >= datetime('now', '-7 day')
+              AND timestamp < datetime('now', 'start of day')
+            ORDER BY timestamp DESC
+            LIMIT 200
+            """,
+            (session["user_id"],)
+        ).fetchall()
+
+        last_month_logs = conn.execute(
+            """
+            SELECT id, food_name, timestamp
+            FROM food_logs
+            WHERE user_id = ?
+              AND timestamp >= datetime('now', '-30 day')
+              AND timestamp < datetime('now', '-7 day')
+            ORDER BY timestamp DESC
+            LIMIT 200
+            """,
+            (session["user_id"],)
+        ).fetchall()
+
+    return render_template(
+        "food_history.html",
+        today_logs=today_logs,
+        last_week_logs=last_week_logs,
+        last_month_logs=last_month_logs,
+    )
 
 @app.route("/check", methods=["POST"])
 def check():
@@ -907,14 +1442,68 @@ def check():
 
     with get_db() as conn:
         row = conn.execute(f"SELECT food_name, {column} AS status FROM food_rules WHERE LOWER(food_name) = ?", (food_query,)).fetchone()
+        inferred_pral, _ = estimate_pral_score(food_input)
+        reference_signal = get_reference_risk_signal(food_input)
 
         if row:
-            res_food, res_status = row["food_name"], row["status"]
+            res_food = row["food_name"]
+            final_status = classify_food_status(
+                condition_value=condition,
+                food_name=res_food,
+                meal_pral=inferred_pral,
+                db_rule_status=row["status"],
+                reference_signal=reference_signal,
+            )
+            res_status = final_status["status"]
         else:
-            res_food, res_status = food_input, "unknown"
+            res_food = food_input
 
-        # Always save what the user checked so history is complete, even for unknown foods.
-        conn.execute("INSERT INTO food_logs (user_id, food_name) VALUES (?, ?)", (session["user_id"], res_food))
+            inferred = infer_condition_rule_statuses(
+                food_name=res_food,
+                meal_pral=inferred_pral,
+                reference_detected=reference_signal["detected"],
+            )
+            conn.execute(
+                "INSERT INTO pending_food_rules (food_name, gastritis_status, gerd_status, hpylori_status, suggested_by_user_id, reason, source_signals, status, updated_at, reviewed_by_user_id, reviewed_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP, NULL, NULL) "
+                "ON CONFLICT(food_name) DO UPDATE SET "
+                "gastritis_status = excluded.gastritis_status, "
+                "gerd_status = excluded.gerd_status, "
+                "hpylori_status = excluded.hpylori_status, "
+                "suggested_by_user_id = excluded.suggested_by_user_id, "
+                "reason = excluded.reason, "
+                "source_signals = excluded.source_signals, "
+                "status = 'pending', "
+                "updated_at = CURRENT_TIMESTAMP, "
+                "reviewed_by_user_id = NULL, "
+                "reviewed_at = NULL",
+                (
+                    res_food,
+                    inferred["gastritis_status"],
+                    inferred["gerd_status"],
+                    inferred["hpylori_status"],
+                    session["user_id"],
+                    inferred["reason"],
+                    ", ".join(reference_signal["matched_keywords"][:10]),
+                ),
+            )
+
+            res_status = inferred.get(column, "safe")
+            flash(
+                f"Saved '{res_food}' as a pending rule suggestion ({res_status}). "
+                f"Admin approval is required before it becomes active."
+            )
+
+        final_status = classify_food_status(
+            condition_value=condition,
+            food_name=res_food,
+            meal_pral=inferred_pral,
+            db_rule_status=(row["status"] if row else None),
+            reference_signal=reference_signal,
+        )
+        res_status = final_status["status"]
+        if final_status["source"] == "reference_override":
+            flash("Reference API override applied: source-backed trigger risk detected.")
 
     # Redirect to the diet_checker page with result data in the URL
     return redirect(url_for("diet_checker", food=res_food, status=res_status))
@@ -936,7 +1525,7 @@ def predict_risk():
     try:
         with get_db() as conn:
             profile_row = conn.execute(
-                "SELECT age, bmi, h_pylori_result, condition FROM users WHERE id = ?",
+                "SELECT age, bmi, condition FROM users WHERE id = ?",
                 (session["user_id"],)
             ).fetchone()
 
@@ -944,9 +1533,6 @@ def predict_risk():
             return {"error": "User profile not found"}, 404
 
         condition_value = (profile_row["condition"] or session.get("condition") or "general").lower()
-        hpylori_value = (profile_row["h_pylori_result"] or "Not Applicable")
-        if condition_value != "hpylori":
-            hpylori_value = "Not Applicable"
         meal_type = payload.get("Meal_Type", "Lunch")
         food_name = normalize_food_name(payload.get("Food_Name"))
         meal_pral, pral_source = estimate_pral_score(food_name, meal_type=meal_type)
@@ -955,7 +1541,6 @@ def predict_risk():
             "Age": to_float(profile_row["age"], 30),
             "BMI": to_float(profile_row["bmi"], 24.5),
             "Primary_Condition": MODEL_CONDITION_MAP.get(condition_value, "General"),
-            "H_Pylori_Result": hpylori_value,
             "Food_Name": food_name,
             "Meal_Type": meal_type,
             "Meal_PRAL_Score": to_float(meal_pral, 0),
@@ -989,18 +1574,38 @@ def predict_risk():
         if symptom_context["trend_delta"] >= 3:
             symptom_adjustment += 0.2
 
-        adjusted_prediction = max(0.0, min(10.0, float(prediction) + symptom_adjustment))
+        reference_signal = get_reference_risk_signal(food_name)
+        adjusted_prediction = max(0.0, min(10.0, float(prediction) + symptom_adjustment + reference_signal["score_boost"]))
         result = build_prediction_result(adjusted_prediction)
         quality_info = assess_prediction_quality(food_name, pral_source, model_columns)
 
         if quality_info["is_uncertain"]:
-            result["level"] = "uncertain"
-            result["title"] = "Uncertain Result"
-            result["message"] = "This food is not well-represented in known data, so this prediction may be unreliable."
-            result["recommendation"] = "Needs Review"
-            result["recommendation_reason"] = "Not enough trusted food-specific data for a reliable recommendation."
             result["confidence_label"] = "Low"
-            result["confidence_percent"] = min(int(result.get("confidence_percent", 50)), 55)
+            result["confidence_percent"] = min(int(result.get("confidence_percent", 50)), 60)
+
+        condition_column = CONDITION_COLUMN_MAP.get(condition_value, "gastritis_status")
+        with get_db() as conn:
+            food_rule_row = conn.execute(
+                f"SELECT {condition_column} AS status FROM food_rules WHERE LOWER(food_name) = ?",
+                (food_name,)
+            ).fetchone()
+
+        final_status = classify_food_status(
+            condition_value=condition_value,
+            food_name=food_name,
+            meal_pral=meal_pral,
+            db_rule_status=(food_rule_row["status"] if food_rule_row else None),
+            reference_signal=reference_signal,
+        )
+
+        if final_status["status"] == "avoid":
+            result["recommendation"] = "Unsafe to Consume"
+            result["recommendation_reason"] = final_status["reason"]
+            if result["level"] == "low":
+                result["message"] = "Model flare score is low, but rule/source signals classify this food as unsafe for your condition."
+        else:
+            result["recommendation"] = "Safe to Consume"
+            result["recommendation_reason"] = final_status["reason"]
 
         result["why_points"] = build_prediction_why_points(
             user_data=user_data,
@@ -1013,24 +1618,56 @@ def predict_risk():
                 1,
                 f"Recent symptom burden is {symptom_context['burden_level']} ({symptom_context['recent_count']} logs in 7 days)."
             )
-        result["why_points"].insert(0, quality_info["reason"])
+        result["why_points"].insert(0, final_status["reason"])
+        result["why_points"].insert(1, quality_info["reason"])
+        if reference_signal["detected"]:
+            refs_considered = ", ".join(item["title"] for item in reference_signal["matched_sources"][:3])
+            result["why_points"].insert(2, f"Reference API signal detected from: {refs_considered}.")
         result["why_points"] = result["why_points"][:5]
         result["pral_score"] = round(float(meal_pral), 2)
         result["pral_source"] = pral_source
+        result["reference_api_used"] = reference_signal["api_checked"]
+        result["reference_matches"] = reference_signal["matched_sources"]
         result["prediction_quality"] = quality_info["quality"]
         result["symptom_burden"] = symptom_context
         result["raw_model_score"] = round(float(prediction), 2)
         result["symptom_adjustment"] = round(float(symptom_adjustment), 2)
-        result["uncertainty_reason"] = quality_info["reason"] if quality_info["is_uncertain"] else None
-        if result["level"] == "high":
+        result["condition_food_status"] = final_status["status"]
+        result["condition_food_reason"] = final_status["reason"]
+        result["uncertainty_reason"] = None
+        if final_status["status"] == "avoid":
             result["alternatives"] = suggest_alternative_meals(
                 condition_value=condition_value,
                 meal_type=meal_type,
                 exclude_food=food_name,
                 limit=3,
+                reference_sources=reference_signal["matched_sources"] or DIET_GUIDANCE_REFERENCES,
             )
         else:
             result["alternatives"] = []
+
+        with get_db() as conn:
+            last_row = conn.execute(
+                "SELECT food_name, timestamp FROM food_logs WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                (session["user_id"],)
+            ).fetchone()
+
+            should_insert = True
+            if last_row:
+                last_food = normalize_food_name(last_row["food_name"])
+                if last_food == food_name:
+                    try:
+                        last_dt = datetime.strptime(last_row["timestamp"], "%Y-%m-%d %H:%M:%S")
+                        if (datetime.now() - last_dt).total_seconds() < 90:
+                            should_insert = False
+                    except (TypeError, ValueError):
+                        should_insert = True
+
+            if should_insert:
+                conn.execute(
+                    "INSERT INTO food_logs (user_id, food_name) VALUES (?, ?)",
+                    (session["user_id"], food_name)
+                )
 
         # Keep the latest prediction available to the template.
         session["last_prediction"] = result
@@ -1041,6 +1678,8 @@ def predict_risk():
             "alternatives": result.get("alternatives", []),
             "recommendation": result.get("recommendation", "Use Caution"),
             "condition": condition_value,
+            "reference_matches": result.get("reference_matches", []),
+            "reference_sources": result.get("reference_sources", []),
         }
 
         # 6. Return the score and interpretation back to the website
@@ -1051,6 +1690,10 @@ def predict_risk():
             "message": result["message"],
             "recommendation": result["recommendation"],
             "recommendation_reason": result["recommendation_reason"],
+            "reference_source_url": result.get("reference_source_url"),
+            "reference_sources": result.get("reference_sources", []),
+            "reference_api_used": result.get("reference_api_used", False),
+            "reference_matches": result.get("reference_matches", []),
             "why_points": result["why_points"],
             "pral_score": result["pral_score"],
             "pral_source": result["pral_source"],
@@ -1064,6 +1707,8 @@ def predict_risk():
             "raw_model_score": result.get("raw_model_score"),
             "symptom_adjustment": result.get("symptom_adjustment"),
             "symptom_burden": result.get("symptom_burden"),
+            "condition_food_status": result.get("condition_food_status"),
+            "condition_food_reason": result.get("condition_food_reason"),
             "uncertainty_reason": result.get("uncertainty_reason"),
             "generated_at": result["generated_at"]
         }
@@ -1098,6 +1743,13 @@ def view_symptoms():
         return redirect(url_for("login"))
 
     severity_map = {"mild": 1.0, "moderate": 2.0, "severe": 3.0}
+    selected_day = None
+    selected_day_raw = (request.args.get("day") or "").strip()
+    if selected_day_raw:
+        try:
+            selected_day = datetime.strptime(selected_day_raw, "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            selected_day = None
 
     with get_db() as conn:
         uid = session["user_id"]
@@ -1105,6 +1757,12 @@ def view_symptoms():
             "SELECT id, symptom, severity, note, timestamp FROM symptoms WHERE user_id = ? ORDER BY timestamp DESC LIMIT 60",
             (uid,)
         ).fetchall()
+        selected_day_logs = []
+        if selected_day:
+            selected_day_logs = conn.execute(
+                "SELECT id, symptom, severity, note, timestamp FROM symptoms WHERE user_id = ? AND date(timestamp) = ? ORDER BY timestamp DESC",
+                (uid, selected_day),
+            ).fetchall()
 
         recent_summary = conn.execute(
             """
@@ -1167,10 +1825,12 @@ def view_symptoms():
         ).fetchall()
 
     daily_map = {row["day"]: int(row["cnt"] or 0) for row in daily_rows}
+    trend_days = []
     day_labels = []
     day_counts = []
     for delta in range(13, -1, -1):
         day = (date.today() - timedelta(days=delta)).isoformat()
+        trend_days.append(day)
         day_labels.append(day[5:])
         day_counts.append(daily_map.get(day, 0))
 
@@ -1235,6 +1895,9 @@ def view_symptoms():
         "view_symptoms.html",
         logs=logs,
         summary=summary,
+        selected_day=selected_day,
+        selected_day_logs=selected_day_logs,
+        trend_days=trend_days,
         trend_labels=day_labels,
         trend_counts=day_counts,
         trigger_insights=trigger_insights,
@@ -1348,7 +2011,26 @@ def insights():
             """,
             (uid,)
         ).fetchall()
-    return render_template("insights.html", frequency=frequency, correlations=correlations)
+        total_symptom_logs = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM symptoms WHERE user_id = ?",
+            (uid,)
+        ).fetchone()["cnt"]
+
+    most_common_symptom = None
+    if total_symptom_logs >= 4 and frequency:
+        first = frequency[0]
+        most_common_symptom = {
+            "name": first["symptom"],
+            "count": int(first["count"] or 0),
+        }
+
+    return render_template(
+        "insights.html",
+        frequency=frequency,
+        correlations=correlations,
+        most_common_symptom=most_common_symptom,
+        total_symptom_logs=int(total_symptom_logs or 0),
+    )
 
 if __name__ == "__main__":
     init_db()
